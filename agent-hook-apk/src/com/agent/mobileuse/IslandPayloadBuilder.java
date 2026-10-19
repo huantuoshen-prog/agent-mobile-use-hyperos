@@ -149,13 +149,18 @@ public final class IslandPayloadBuilder {
 
             JSONObject big = new JSONObject();
             if (compact) {
-                // Compact pill: text only, no leading icon block. This keeps the
-                // collapsed island narrow instead of the full icon+title+content bar.
+                // Compact pill: leading icon plus a title only (no content line),
+                // which keeps the collapsed island narrow. A textInfo-only
+                // bigIslandArea is rejected by HyperOS SystemUI, so keep the
+                // imageTextInfoLeft envelope.
                 JSONObject compactText = new JSONObject();
-                compactText.put("title", cut(leftTitle, 10));
-                compactText.put("content", cut(leftContent, 12));
+                compactText.put("title", cut(leftTitle, 8));
                 compactText.put("showHighlightColor", true);
-                big.put("textInfo", compactText);
+                JSONObject compactLeft = new JSONObject();
+                compactLeft.put("type", 1);
+                compactLeft.put("picInfo", picInfo);
+                compactLeft.put("textInfo", compactText);
+                big.put("imageTextInfoLeft", compactLeft);
             } else {
                 big.put("imageTextInfoLeft", left);
             }
