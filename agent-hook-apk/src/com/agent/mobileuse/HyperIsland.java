@@ -5,6 +5,11 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Shader;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.Bundle;
@@ -197,6 +202,17 @@ public final class HyperIsland {
     public static void attachCapsule(Context context, Notification.Builder builder,
                                      String stateTitle, String sessionTitle, String hint,
                                      Bitmap icon) {
+        attachCapsule(context, builder, stateTitle, sessionTitle, hint, icon, false);
+    }
+
+    /**
+     * Attach the capsule island. The capsule always uses the compact (text-only)
+     * layout; when {@code virtualDisplayRunning} is true it also gets the rainbow
+     * outer-glow effect (official {@code outEffectColor} / {@code outEffectSrc}).
+     */
+    public static void attachCapsule(Context context, Notification.Builder builder,
+                                     String stateTitle, String sessionTitle, String hint,
+                                     Bitmap icon, boolean virtualDisplayRunning) {
         if (!isIslandActive(context) || builder == null) {
             return;
         }
@@ -207,8 +223,18 @@ public final class HyperIsland {
                     new IslandPayloadBuilder.ActionRef(IslandPayloadBuilder.PIC_ACTION_SWITCH,
                             "切后台", IslandPayloadBuilder.INTENT_BROADCAST),
             };
+            String glowPicKey = null;
+            Bitmap glowBitmap = null;
+            if (virtualDisplayRunning) {
+                glowBitmap = createRainbowGlowBitmap(256);
+                if (glowBitmap != null) {
+                    glowPicKey = IslandPayloadBuilder.PIC_KEY_PREFIX
+                            + IslandPayloadBuilder.PIC_EFFECT;
+                }
+            }
             String json = IslandPayloadBuilder.capsule(protocolVersion(context), stateTitle,
-                    sessionTitle, hint, IslandPayloadBuilder.PIC_CAPSULE, actions);
+                    sessionTitle, hint, IslandPayloadBuilder.PIC_CAPSULE, true,
+                    glowPicKey == null ? null : "#32ADE6", glowPicKey, actions);
             if (json == null) {
                 return;
             }
@@ -219,6 +245,9 @@ public final class HyperIsland {
             if (iconObject != null) {
                 pics.putParcelable(IslandPayloadBuilder.PIC_KEY_PREFIX
                         + IslandPayloadBuilder.PIC_CAPSULE, iconObject);
+            }
+            if (glowBitmap != null) {
+                pics.putParcelable(glowPicKey, Icon.createWithBitmap(glowBitmap));
             }
             if (!pics.isEmpty()) {
                 extras.putBundle(EXTRA_PICS, pics);
@@ -237,7 +266,8 @@ public final class HyperIsland {
                 extras.putBundle(EXTRA_ACTIONS, actionBundle);
             }
             builder.addExtras(extras);
-            android.util.Log.i(TAG, "Super island capsule attached (" + json.length() + " chars)");
+            android.util.Log.i(TAG, "Super island capsule attached (" + json.length()
+                    + " chars, compact, glow=" + virtualDisplayRunning + ")");
         } catch (Throwable t) {
             android.util.Log.w(TAG, "attachCapsule failed: " + t.getMessage());
         }
@@ -360,6 +390,41 @@ public final class HyperIsland {
                 21000 + (sessionId == null ? 0 : sessionId.hashCode()), intent, PENDING_FLAGS);
         Notification.Action.Builder b = new Notification.Action.Builder(null, title, pi);
         return b.build();
+    }
+
+    // ------------------------------------------------------------- bitmaps
+
+    /**
+     * Rainbow gradient bitmap used as {@code param_v2.outEffectSrc} so the island
+     * gets the official outer-glow effect while the virtual display is running.
+     * A gradient (instead of a flat {@code outEffectColor}) is what produces the
+     * multi-colour ring; unknown ROMs simply ignore the key.
+     */
+    public static Bitmap createRainbowGlowBitmap(int size) {
+        try {
+            if (size <= 0) {
+                size = 256;
+            }
+            Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            int[] colors = new int[]{
+                    Color.parseColor("#FF3B30"), // red
+                    Color.parseColor("#FF9500"), // orange
+                    Color.parseColor("#FFCC00"), // yellow
+                    Color.parseColor("#34C759"), // green
+                    Color.parseColor("#32ADE6"), // cyan
+                    Color.parseColor("#5856D6"), // indigo
+                    Color.parseColor("#AF52DE"), // purple
+            };
+            float[] stops = new float[]{0f, 0.17f, 0.33f, 0.5f, 0.67f, 0.83f, 1f};
+            paint.setShader(new LinearGradient(0, 0, size, size, colors, stops,
+                    Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, size, size, paint);
+            return bitmap;
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     // ---------------------------------------------------------- system props

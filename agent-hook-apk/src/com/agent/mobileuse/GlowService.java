@@ -323,7 +323,9 @@ public class GlowService extends Service {
             builder.setStyle(bigStyle);
 
             // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
-            HyperIsland.attachCapsule(this, builder, capsuleTitle, displayTitle, bigText, iconBitmap);
+            boolean virtualDisplayRunning = "BACKGROUND".equals(mode);
+            HyperIsland.attachCapsule(this, builder, capsuleTitle, displayTitle, bigText,
+                    iconBitmap, virtualDisplayRunning);
 
             startForeground(NOTIFICATION_ID, builder.build());
             try {

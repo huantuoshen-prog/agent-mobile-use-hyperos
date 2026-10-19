@@ -31,6 +31,7 @@ public final class IslandPayloadSelftest {
         testCompletedAndQuestionPayloads();
         testActionRefs();
         testByteBudget();
+        testCompactGlowCapsule();
         testNullPic();
 
         System.out.println("RESULT: " + (failed == 0 ? "PASS" : "FAIL")
@@ -106,6 +107,13 @@ public final class IslandPayloadSelftest {
                         Class.forName("android.content.Context"),
                         Class.forName("android.app.Notification$Builder"),
                         String.class, String.class, String.class, Bitmap.class));
+        check("HyperIsland.attachCapsule(Context, Notification.Builder, String, String, String, Bitmap, boolean)",
+                hasStaticMethod(type, "attachCapsule",
+                        Class.forName("android.content.Context"),
+                        Class.forName("android.app.Notification$Builder"),
+                        String.class, String.class, String.class, Bitmap.class, boolean.class));
+        check("HyperIsland.createRainbowGlowBitmap(int)",
+                hasStaticMethod(type, "createRainbowGlowBitmap", int.class));
         check("HyperIsland.attachCompleted(Context, Notification.Builder, String, String, Bitmap, String)",
                 hasStaticMethod(type, "attachCompleted",
                         Class.forName("android.content.Context"),
@@ -227,6 +235,36 @@ public final class IslandPayloadSelftest {
         check("cut() truncates long text", IslandPayloadBuilder.cut("一二三四五六", 3).length() <= 3);
         check("cut() flattens newlines", !IslandPayloadBuilder.cut("a\nb", 10).contains("\n"));
         check("utf8Length counts bytes", IslandPayloadBuilder.utf8Length("中") == 3);
+    }
+
+    private static void testCompactGlowCapsule() throws Exception {
+        String json = IslandPayloadBuilder.capsule(3, "前台接管", "会话 A", "虚拟屏后台运行中",
+                IslandPayloadBuilder.PIC_CAPSULE, true,
+                "#32ADE6", "miui.focus.pic_effect", null);
+        JSONObject v2 = parse(json, "capsule-compact");
+        if (v2 == null) {
+            return;
+        }
+        check("compact outEffectColor", "#32ADE6".equals(v2.optString("outEffectColor")));
+        check("compact outEffectSrc", "miui.focus.pic_effect".equals(v2.optString("outEffectSrc")));
+        JSONObject island = requireObj(v2, "param_island", "capsule-compact");
+        JSONObject big = requireObj(island, "bigIslandArea", "capsule-compact");
+        check("compact bigIslandArea has textInfo", big != null && big.has("textInfo"));
+        check("compact bigIslandArea drops imageTextInfoLeft",
+                big != null && !big.has("imageTextInfoLeft"));
+        JSONObject small = requireObj(island, "smallIslandArea", "capsule-compact");
+        check("compact smallIslandArea keeps pic", small != null && small.has("picInfo"));
+
+        String legacy = IslandPayloadBuilder.capsule(3, "前台接管", "会话 A", "hint",
+                IslandPayloadBuilder.PIC_CAPSULE, null);
+        JSONObject legacyV2 = parse(legacy, "capsule-legacy");
+        check("legacy capsule keeps full image+text layout", legacyV2 != null
+                && legacyV2.optJSONObject("param_island") != null
+                && legacyV2.optJSONObject("param_island").optJSONObject("bigIslandArea") != null
+                && legacyV2.optJSONObject("param_island").optJSONObject("bigIslandArea")
+                        .has("imageTextInfoLeft"));
+        check("legacy capsule has no glow fields", legacyV2 != null
+                && !legacyV2.has("outEffectColor") && !legacyV2.has("outEffectSrc"));
     }
 
     private static void testNullPic() {

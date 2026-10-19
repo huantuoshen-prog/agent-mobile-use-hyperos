@@ -29,6 +29,8 @@ public final class IslandPayloadBuilder {
     public static final String PIC_CAPSULE = "capsule";
     public static final String PIC_CHECKMARK = "checkmark";
     public static final String PIC_QUESTION = "question";
+    /** Rainbow outer-glow source image, referenced by param_v2.outEffectSrc. */
+    public static final String PIC_EFFECT = "effect";
     public static final String PIC_ACTION_STOP = "action_stop";
     public static final String PIC_ACTION_SWITCH = "action_switch";
     public static final String PIC_ACTION_OPEN = "action_open";
@@ -65,27 +67,45 @@ public final class IslandPayloadBuilder {
      */
     public static String capsule(int protocol, String stateTitle, String sessionTitle,
                                  String hint, String picKey, ActionRef[] actions) {
+        return capsule(protocol, stateTitle, sessionTitle, hint, picKey, false, null, null, actions);
+    }
+
+    /**
+     * Capsule island, optionally in a compact (text-only big island) layout and
+     * with an outer-glow effect.
+     *
+     * @param compact       true = bigIslandArea only carries textInfo (narrow pill),
+     *                      false = icon + text layout
+     * @param outEffectColor official param_v2.outEffectColor ("#RRGGBB"), null to omit
+     * @param outEffectSrc   picture key for the glow source ("miui.focus.pic_*"), null to omit
+     */
+    public static String capsule(int protocol, String stateTitle, String sessionTitle,
+                                 String hint, String picKey, boolean compact,
+                                 String outEffectColor, String outEffectSrc,
+                                 ActionRef[] actions) {
         return build(protocol, "agent_capsule", stateTitle, hint, "#00D2FF",
-                stateTitle, sessionTitle, 1, 3600, picKey, actions);
+                stateTitle, sessionTitle, 1, 3600, picKey, compact,
+                outEffectColor, outEffectSrc, actions);
     }
 
     /** Task-completed island. */
     public static String completed(int protocol, String title, String content,
                                    String picKey, ActionRef[] actions) {
         return build(protocol, "agent_completed", "任务完成", title, "#00FF9D",
-                title, content, 1, 600, picKey, actions);
+                title, content, 1, 600, picKey, false, null, null, actions);
     }
 
     /** Interactive question island. */
     public static String question(int protocol, String title, String question,
                                   String picKey, ActionRef[] actions) {
         return build(protocol, "agent_question", "需要确认", title, "#FFA726",
-                title, question, 2, 1800, picKey, actions);
+                title, question, 2, 1800, picKey, false, null, null, actions);
     }
 
     private static String build(int protocol, String business, String aodTitle, String ticker,
                                 String highlightColor, String leftTitle, String leftContent,
                                 int islandProperty, int islandTimeout, String picKey,
+                                boolean compact, String outEffectColor, String outEffectSrc,
                                 ActionRef[] actions) {
         if (picKey == null || picKey.trim().isEmpty()) {
             return null;
@@ -128,7 +148,17 @@ public final class IslandPayloadBuilder {
             left.put("textInfo", textInfo);
 
             JSONObject big = new JSONObject();
-            big.put("imageTextInfoLeft", left);
+            if (compact) {
+                // Compact pill: text only, no leading icon block. This keeps the
+                // collapsed island narrow instead of the full icon+title+content bar.
+                JSONObject compactText = new JSONObject();
+                compactText.put("title", cut(leftTitle, 10));
+                compactText.put("content", "");
+                compactText.put("showHighlightColor", true);
+                big.put("textInfo", compactText);
+            } else {
+                big.put("imageTextInfoLeft", left);
+            }
             island.put("bigIslandArea", big);
 
             JSONObject small = new JSONObject();
@@ -136,6 +166,13 @@ public final class IslandPayloadBuilder {
             island.put("smallIslandArea", small);
 
             v2.put("param_island", island);
+
+            if (outEffectColor != null && !outEffectColor.trim().isEmpty()) {
+                v2.put("outEffectColor", outEffectColor.trim());
+            }
+            if (outEffectSrc != null && !outEffectSrc.trim().isEmpty()) {
+                v2.put("outEffectSrc", outEffectSrc.trim());
+            }
 
             JSONObject base = new JSONObject();
             base.put("type", 1);
