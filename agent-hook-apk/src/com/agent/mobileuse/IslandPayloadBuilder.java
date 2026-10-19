@@ -153,13 +153,9 @@ public final class IslandPayloadBuilder {
                 // which keeps the collapsed island narrow. A textInfo-only
                 // bigIslandArea is rejected by HyperOS SystemUI, so keep the
                 // imageTextInfoLeft envelope.
-                JSONObject compactText = new JSONObject();
-                compactText.put("title", cut(leftTitle, 8));
-                compactText.put("showHighlightColor", true);
                 JSONObject compactLeft = new JSONObject();
                 compactLeft.put("type", 1);
-                compactLeft.put("picInfo", picInfo);
-                compactLeft.put("textInfo", compactText);
+                compactLeft.put("picInfo", new JSONObject(picInfo.toString()));
                 big.put("imageTextInfoLeft", compactLeft);
             } else {
                 big.put("imageTextInfoLeft", left);
