@@ -92,16 +92,50 @@ public class HookEntry implements IXposedHookLoadPackage {
 
     private void hookAllMethodsReturningTrue(ClassLoader cl, String className, String methodName) {
         try {
-            Class<?> clazz = XposedHelpers.findClass(className, cl);
+            Class<?> clazz = findClassAny(className, cl);
+            if (clazz == null) {
+                throw new ClassNotFoundException(className);
+            }
             XposedBridge.hookAllMethods(clazz, methodName, XC_MethodReplacement.returnConstant(Boolean.TRUE));
         } catch (Throwable t) {
             XposedBridge.log("[AgentMobileUseHook] Failed to hook " + className + "#" + methodName + ": " + t.getMessage());
         }
     }
 
+    /**
+     * Resolve a class from the package loader, falling back to the thread context
+     * loader and the boots system loader. In system_server (LSPosed scope
+     * "android"/"system") the wm/display classes are not visible from
+     * lpparam.classLoader on HyperOS 4 / Android 17, which made every wm hook
+     * fail with ClassNotFoundException.
+     */
+    private static Class<?> findClassAny(String className, ClassLoader cl) {
+        if (cl != null) {
+            try {
+                return XposedHelpers.findClass(className, cl);
+            } catch (Throwable ignored) {
+            }
+        }
+        ClassLoader ctx = Thread.currentThread().getContextClassLoader();
+        if (ctx != null) {
+            try {
+                return Class.forName(className, false, ctx);
+            } catch (Throwable ignored) {
+            }
+        }
+        try {
+            return Class.forName(className);
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     private void hookImmsDisplayIsolation(ClassLoader cl) {
         try {
-            Class<?> imms = XposedHelpers.findClass("com.android.server.inputmethod.InputMethodManagerService", cl);
+            Class<?> imms = findClassAny("com.android.server.inputmethod.InputMethodManagerService", cl);
+            if (imms == null) {
+                throw new ClassNotFoundException("com.android.server.inputmethod.InputMethodManagerService");
+            }
             XposedBridge.hookAllMethods(imms, "computeImeDisplayIdForTarget", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -135,7 +169,10 @@ public class HookEntry implements IXposedHookLoadPackage {
 
     private void hookEdgeGlowScreenshotExclusion(ClassLoader cl) {
         try {
-            Class<?> animatorClass = XposedHelpers.findClass("com.android.server.wm.WindowStateAnimator", cl);
+            Class<?> animatorClass = findClassAny("com.android.server.wm.WindowStateAnimator", cl);
+            if (animatorClass == null) {
+                throw new ClassNotFoundException("com.android.server.wm.WindowStateAnimator");
+            }
             XposedBridge.hookAllMethods(animatorClass, "createSurfaceLocked", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {

@@ -7,6 +7,7 @@
 - **默认关闭**。升级安装不会改变通知行为；不开启时三类通知（胶囊 / 完成 / 提问）保持普通通知。
 - 开关位置：`agent_hook.apk` 控制台 →「系统特性偏好」→「超级岛通知（HyperOS）」。
 - 该开关写入 SharedPreferences `agent_capsule_state` 的 `enable_super_island`（`HyperIsland.PREF_ENABLE`），非 HyperOS 机型上开关置灰不可点。
+- **Android 16/17 注意**：这些系统上本应用的 `SharedPreferences` 实际存放在 `/data/misc/apexdata/<uuid>/prefs/com.agent.mobileuse/`（`<uuid>` 每机不同），而不是 `/data/data/com.agent.mobileuse/shared_prefs/`。用 root 往后者写开关不会生效，且应用运行中回写会覆盖外部改动；**请始终用控制台开关设置**。
 - 即使开关开启，若系统未授权焦点通知（`canShowFocus=false`）或机型不满足条件，`HyperIsland` 的 attach 方法直接返回，通知退化为普通通知，不会崩溃。
 
 ## 2. 原理
@@ -67,12 +68,16 @@ adb shell getprop persist.sys.feature.island
 # 2. 焦点通知协议版本（1=OS1, 2=OS2, 3=OS3+）
 adb shell settings get system notification_focus_protocol
 
-# 3. 本应用焦点通知权限（true/false）
-adb shell content call --uri content://miui.statusbar.notification.public \
-  --method canShowFocus --arg com.agent.mobileuse --extra package:s:com.agent.mobileuse
+# 3. 本应用焦点通知权限（true/false）。
+#    注意：`content call` 以 shell(uid 2000) 执行会报 "Package is not owned by uid 2000"，
+#    需以应用自身身份或 root 触发；最直接的办法是看 logcat 里 HyperIsland 的
+#    `canShowFocus(com.agent.mobileuse) = ...` 输出（本适配已内置该日志）。
+adb shell logcat -d -s AgentHyperIsland | grep canShowFocus
 
-# 4. 通知里是否真的带上了岛 JSON
+# 4. 通知里是否真的带上了岛 JSON，以及 NMS 是否识别为焦点通知
 adb shell dumpsys notification --noredact | grep -A2 miui.focus.param
+adb shell dumpsys notification --noredact | grep -o 'focusType=[A-Za-z]*' | sort | uniq -c
+#    期望出现 focusType=PARAMS（普通通知为 focusType=null）
 
 # 5. 悬停/展开岛时 SystemUI 的焦点通知日志
 adb logcat -d | grep -iE "focus|dynamicisland|island" | tail -n 80
@@ -108,7 +113,8 @@ adb shell getprop ro.mi.os.version.name
 
 ## 7. 已知限制与未验证项
 
-- **未实机验证**：当前交付只做了 javac 编译校验与 JVM 单测（`IslandPayloadSelftest`），没有 HyperOS 4 真机运行记录；上岛效果、字段接受度、XMSF 类名均需真机确认。
+- **已在真机验证（2026-10-19，HyperOS 4 / Android 17，机型 2510DRK44C）**：胶囊、任务完成、提问三类通知均产生 `focusType=PARAMS` 并在状态栏超级岛渲染（截图见第 9 节）；`canShowFocus` 经 LSPosed 闸门后返回 true；XMSF `AuthSession#b`、SystemUI `canShowFocus/canCustomFocus/checkSignatures` 钩子均已在 LSPosed 日志确认挂载。
+- **仍未验证**：虚拟屏/显示隔离（system_server 侧 `wm`、`IMMS`、`WindowStateAnimator` 等 hook 在真机日志报 `ClassNotFoundException`，见第 9 节），以及展开态大岛（`bigIslandArea`）的完整布局与岛内按钮点击效果。
 - **编译校验口径**：已验证 `javac --release 8` 对 `android-28.jar`（targetSdk 28）与 `android-34.jar` 均零错误；仓库自带 `build.sh` 使用的是 `android-23` 平台包，而代码中 `TileService` 需要 API 24+，该 jar 本身无法编译本仓库（既有问题，本次未改动构建脚本）。
 - **字段名歧义**：官方指南示例写作 `miui.focus.paramtextInfo`（疑似 markdown 粘连），模板库与社区实现用 `textInfo`；本实现按 `textInfo` 输出，若真机不显示需 A/B 对照。
 - **协议字段**：`notification_focus_protocol` 只表示协议版本，不授予权限；本实现默认按 protocol 3 输出。
@@ -123,3 +129,22 @@ adb shell getprop ro.mi.os.version.name
 - 关闭开关 = 降级普通通知；
 - 禁用/卸载模块 = 完全移除 hook；
 - 仓库内可 `git checkout -- <file>` 回到 v0.8.7-alpha 的对应文件。
+
+## 9. 真机实测记录（2026-10-19）
+
+设备：`2510DRK44C` / Android 17（SDK 37）/ HyperOS OS4.0 V816，KernelSU + LSPosed，`persist.sys.feature.island=1`、`notification_focus_protocol=3`。
+
+| 步骤 | 结果 |
+| --- | --- |
+| 刷入 v0.9.0-alpha KSU 模块并重启 | 模块生效，LSPosed scope 5 行齐全，`AgentMobileUseHook` 日志确认 SystemUI `canShowFocus/canCustomFocus/checkSignatures`、XMSF `AuthSession#b` 挂载成功 |
+| 控制台打开「超级岛通知（HyperOS）」 | 开关写入成功，`canShowFocus(com.agent.mobileuse) = true` |
+| `am start-foreground-service ... -a START_FOREGROUND` | 胶囊通知 `focusType=PARAMS`，状态栏超级岛显示「前台接管」（眼睛图标） |
+| `am broadcast -a ...ACTION_NOTIFY --ei total 8 --ei completed 8` | 完成通知 `focusType=PARAMS`，超级岛显示绿色 ✓ + 会话名 |
+| `am start -n .../.QuestionActivity --es request_id ... --es data '{"questions":[...]}'` | 提问通知 `focusType=PARAMS`，超级岛右侧显示琥珀色「?」 |
+| `dumpsys notification --noredact` | 三条通知 extras 均含 `miui.focus.param=String`、`miui.focus.pics=Bundle`、`miui.focus.actions=Bundle`，JSON 长度约 900 字节 |
+
+**遗留问题（未解决，如实记录）**
+
+- SystemUI/`android` 作用域下 `com.android.server.wm.*`、`InputMethodManagerService`、`WindowStateAnimator` 的 hook 报 `ClassNotFoundException`，即显示隔离那批 hook 在 HyperOS 4 上未真正挂载；虚拟屏行为需继续排查（可能与 LSPosed 在 system_server 中的 ClassLoader 选择有关）。
+- 展开态大岛、岛内按钮（停止/切后台）尚未点按验证。
+- 本例中 root 直接写 `/data/data/com.agent.mobileuse/shared_prefs/` 的开关会被应用运行中的回写覆盖，最终改用控制台开关，见第 1 节说明。

@@ -334,7 +334,7 @@ public class GlowService extends Service {
                   .putString("session_title", displayTitle != null ? displayTitle : "")
                   .apply();
             } catch (Throwable ignored) {}
-            android.util.Log.i("AgentGlowService", "Promoted to Native Fluid Cloud successfully (" + capsuleTitle + ") for session: " + sid + " (" + displayTitle + ")");
+            android.util.Log.i("AgentGlowService", "Capsule notification promoted (" + capsuleTitle + ") for session: " + sid + " (" + displayTitle + ")");
         } catch (Throwable t) {
             android.util.Log.e("AgentGlowService", "Failed to promote to foreground: " + t.getMessage(), t);
         }

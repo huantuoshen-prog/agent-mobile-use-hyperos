@@ -133,6 +133,18 @@ public class SettingsActivity extends Activity {
                 sIntent.setAction("REFRESH");
                 startGlowService(sIntent);
             } catch (Throwable ignored) {}
+            // Refresh the status row immediately so switch and text never disagree.
+            if (mTvStatusIsland != null) {
+                String state = HyperIsland.describeState(SettingsActivity.this);
+                mTvStatusIsland.setText(state);
+                if (state.startsWith("已开启")) {
+                    mTvStatusIsland.setTextColor(Color.parseColor("#49E9A6"));
+                } else if (state.startsWith("系统未授权")) {
+                    mTvStatusIsland.setTextColor(Color.parseColor("#E3B341"));
+                } else {
+                    mTvStatusIsland.setTextColor(Color.parseColor("#8B949E"));
+                }
+            }
             Toast.makeText(SettingsActivity.this, isChecked ? "超级岛通知已开启 (任务通知将上岛)" : "超级岛通知已关闭 (退回普通通知栏)", Toast.LENGTH_SHORT).show();
         }
     };
