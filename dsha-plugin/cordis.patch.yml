@@ -1,0 +1,5 @@
+# dsh-mobile-use bundle patch: one host-side plugin row.
+# The row id must stay stable: the loader uses it for hot-swap/diagnostics.
+- insert:
+    - id: dsh-mobile-use
+      name: 'dsh-mobile-use'
