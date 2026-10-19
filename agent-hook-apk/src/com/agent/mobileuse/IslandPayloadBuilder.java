@@ -153,7 +153,7 @@ public final class IslandPayloadBuilder {
                 // collapsed island narrow instead of the full icon+title+content bar.
                 JSONObject compactText = new JSONObject();
                 compactText.put("title", cut(leftTitle, 10));
-                compactText.put("content", "");
+                compactText.put("content", cut(leftContent, 12));
                 compactText.put("showHighlightColor", true);
                 big.put("textInfo", compactText);
             } else {
