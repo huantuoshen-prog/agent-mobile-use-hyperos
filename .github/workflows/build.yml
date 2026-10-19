@@ -18,17 +18,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install platform + build-tools
+      # ubuntu-latest already ships an Android SDK at $ANDROID_HOME. Do not use
+      # android-actions/setup-android here: it runs `sdkmanager tools`, which no
+      # longer exists in current cmdline-tools and fails with exit code 1.
+      - name: Install platform android-28 + build-tools 34
         run: |
-          sdkmanager --install "platforms;android-28" "build-tools;34.0.0"
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "SDK=$SDK"
+          ls "$SDK/platforms" "$SDK/build-tools" 2>/dev/null || true
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$PATH"
           yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-28" "build-tools;34.0.0"
+          ls "$SDK/platforms/android-28/android.jar"
+          ls "$SDK/build-tools/34.0.0/aapt" "$SDK/build-tools/34.0.0/d8"
 
       - name: Build hook APK
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
         run: bash agent-hook-apk/build-ci.sh
 
       - name: Pack KernelSU module
