@@ -120,8 +120,11 @@ public final class HyperIsland {
             arg.putString("package", context.getPackageName());
             Bundle result = context.getContentResolver().call(
                     android.net.Uri.parse(FOCUS_PERMISSION_URI), "canShowFocus", null, arg);
-            return result != null && result.getBoolean("canShowFocus", false);
+            boolean allowed = result != null && result.getBoolean("canShowFocus", false);
+            android.util.Log.i(TAG, "canShowFocus(" + context.getPackageName() + ") = " + allowed);
+            return allowed;
         } catch (Throwable t) {
+            android.util.Log.w(TAG, "canShowFocus query failed: " + t);
             return false;
         }
     }
@@ -141,7 +144,15 @@ public final class HyperIsland {
 
     /** Gate used by every attach call: switch on + ROM supports + OS permits. */
     public static boolean isIslandActive(Context context) {
-        return isEnabled(context) && isIslandSupported(context);
+        boolean enabled = isEnabled(context);
+        boolean active = enabled && isIslandSupported(context);
+        if (!active) {
+            boolean rom = isHyperOs();
+            boolean feature = getBooleanProperty(PROP_ISLAND_FEATURE, false);
+            android.util.Log.i(TAG, "island gate closed: pref=" + enabled + " hyperOs=" + rom
+                    + " feature=" + feature + " canShowFocus=" + canShowFocus(context));
+        }
+        return active;
     }
 
     /**
