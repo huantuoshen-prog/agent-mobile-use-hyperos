@@ -115,7 +115,7 @@ adb shell getprop ro.mi.os.version.name
 
 - **已在真机验证（2026-10-19，HyperOS 4 / Android 17，机型 2510DRK44C）**：胶囊、任务完成、提问三类通知均产生 `focusType=PARAMS` 并在状态栏超级岛渲染（截图见第 9 节）；`canShowFocus` 经 LSPosed 闸门后返回 true；XMSF `AuthSession#b`、SystemUI `canShowFocus/canCustomFocus/checkSignatures` 钩子均已在 LSPosed 日志确认挂载。
 - **虚拟屏/显示隔离（2026-10-19 补测通过）**：`/api/start` 创建 `AgentVirtualDisplay`（display 2，1152×2496，dpi 480）；`/api/mode?mode=background` 把设置页迁移到 display 2 并截帧成功（HTTP 200）；`POST /api/action {"action":"launch_app","package":"com.android.settings"}` 在 display 2 冷启动成功并返回 24 个 UI 节点（`ok display=2 ... total=24 retries=1`）。即：system_server 那批 wm/IME hook 确实没挂上（日志 `ClassNotFoundException`），但基础副屏能力不依赖它们。
-- **仍未验证**：展开态大岛（`bigIslandArea`）的完整布局、岛内按钮（停止/切后台）点按效果；以及缺少 wm hook 时个别需要 `canBeLaunchedOnDisplay` 强校验的跨屏启动场景。
+- **仍未验证**：自定义 `bigIslandArea` 模板布局（当前展开态按系统焦点通知样式渲染，含会话名与「切后台」按钮）；岛内按钮的实际点按行为；以及缺少 wm hook 时个别需要 `canBeLaunchedOnDisplay` 强校验的跨屏启动场景。
 - **编译校验口径**：已验证 `javac --release 8` 对 `android-28.jar`（targetSdk 28）与 `android-34.jar` 均零错误；仓库自带 `build.sh` 使用的是 `android-23` 平台包，而代码中 `TileService` 需要 API 24+，该 jar 本身无法编译本仓库（既有问题，本次未改动构建脚本）。
 - **字段名歧义**：官方指南示例写作 `miui.focus.paramtextInfo`（疑似 markdown 粘连），模板库与社区实现用 `textInfo`；本实现按 `textInfo` 输出，若真机不显示需 A/B 对照。
 - **协议字段**：`notification_focus_protocol` 只表示协议版本，不授予权限；本实现默认按 protocol 3 输出。
@@ -148,9 +148,27 @@ adb shell getprop ro.mi.os.version.name
 | `POST /api/mode?mode=foreground` + `/api/screenshot` | HTTP 200，205244 字节（截本机屏） |
 | `POST /api/mode?mode=background` + `/api/screenshot` | 迁移 `com.android.settings/com.android.settings.MainSettings`（task 1324）到 display 2，HTTP 200，203724 字节（1152×2496，实际 JPEG 数据） |
 | `POST /api/action {"action":"launch_app","package":"com.android.settings"}` | display 2 冷启动成功，UI dump 返回 `total=24 retries=1`，截图可见设置页在副屏渲染 |
+| 紧凑胶囊（v0.9.0，icon-only `bigIslandArea`） | 状态栏胶囊缩为纯图标黑药丸（约 330px），`focusType=PARAMS` 不变 |
+| 后台模式 + 虚拟屏运行（v0.9.0） | 日志 `Super island capsule attached (... glow=true)`，胶囊出现彩色外圈光效；连续 10 帧环色在青/紫/橙间循环 |
+| 前台模式对照（v0.9.0） | 日志 `glow=false`，连续 8 帧无任何高饱和彩色像素（无光效） |
 
 **遗留问题（未解决，如实记录）**
 
 - `android`/`system` 作用域下 `com.android.server.wm.*`（LogicalDisplay、ActivityTaskSupervisor、Task、RootWindowContainer 等）与 `InputMethodManagerService` 的 hook 报 `ClassNotFoundException`（即使加了 `lpparam.classLoader → Thread.contextClassLoader → Class.forName` 三级回退）；`WindowStateAnimator` 的截屏排除 hook 则挂载成功。即显示隔离那批 hook 在 HyperOS 4 上未真正挂载，但当次真机实测虚拟屏创建/迁移/启动/截屏/UI dump 全部可用，说明不是阻塞项；根因疑为 LSPosed 在 system_server 中给模块的 ClassLoader 与 wm 类实际加载器不一致，可在后续版本用延迟重试或 `ClassLoader.getSystemClassLoader()` 继续排查。
 - 展开态大岛、岛内按钮（停止/切后台）尚未点按验证。
 - 本例中 root 直接写 `/data/data/com.agent.mobileuse/shared_prefs/` 的开关会被应用运行中的回写覆盖，最终改用控制台开关，见第 1 节说明。
+
+## 10. 紧凑岛与彩虹外圈光效（v0.9.0 新增）
+
+- **紧凑岛**：胶囊通知的 `param_island.bigIslandArea` 改为「纯图标」形态
+  （`imageTextInfoLeft = {type:1, picInfo:{...}}`，不带 `textInfo`），状态栏胶囊只显示一个图标，
+  不再占用文字宽度；展开后仍由 `baseInfo` + 动作按钮提供会话名与「切后台」等操作。
+  文字版（`textInfo`）与仅标题版都会被 SystemUI 拒绝，因此保留 `imageTextInfoLeft` 外壳。
+- **彩虹外圈光效**：仅在「后台接管」模式（虚拟屏运行中，`START_BACKGROUND` / `api/mode=background`）附加：
+  1. `param_island.outEffectSrc = "outer_glow"`（官方哨兵值，不是图片 key）；
+  2. `param_v2.outEffectSrc = "outer_glow"`（整岛光效）；
+  3. `param_island.outEffectColor` 留空，交给 SystemUI 默认多色光带（填 `#RRGGBB` 可固定单色）。
+  `outEffectSrc` 若误填 `miui.focus.pic_*` 图片 key，SystemUI 直接忽略、不报错。
+- 前台接管模式（`START_FOREGROUND`）不写这两个字段，无光效；后台模式停止或切回前台后光效消失。
+- 光效是动画：同一胶囊连续截帧时环色会在青→紫→橙之间循环，属官方 `LightBgShader` 渲染，不是渐变静态图。
+- 真机证据（2026-10-19，HyperOS 4 / Android 17）：`glow=true` 时胶囊出现彩色描边/外晕，连续 10 帧内依次出现青、紫、橙环色；`glow=false` 对照帧无任何彩色像素。
