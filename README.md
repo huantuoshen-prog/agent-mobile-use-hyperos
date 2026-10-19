@@ -186,6 +186,8 @@ HyperOS 的「超级岛」由焦点通知（`miui.focus.param` extras）驱动�
 
 详见 [docs/hyperos.md](docs/hyperos.md)（原理、开启方式、真机验证命令、故障恢复）。该功能**默认关闭**，入口：设置页「系统特性偏好 → 超级岛通知（HyperOS）」；关闭时行为与 v0.8.7-alpha 普通通知一致。
 
+> 真机状态（2026-10-19，REDMI K90 / `2510DRK44C`，HyperOS OS4.0 V816 / Android 17）：胶囊、完成、提问三类通知均已上岛并通过重启复验；虚拟屏创建 / 任务迁移 / `launch_app` / 截屏 / UI dump 均可用。system_server 侧 `wm`/`IME` 那批 hook 在 HyperOS 4 上仍报 `ClassNotFoundException`（未挂载，但不阻塞上述能力），详见 docs/hyperos.md 第 7、9 节。
+
 ---
 
 <a name="english"></a>

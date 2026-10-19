@@ -114,7 +114,8 @@ adb shell getprop ro.mi.os.version.name
 ## 7. 已知限制与未验证项
 
 - **已在真机验证（2026-10-19，HyperOS 4 / Android 17，机型 2510DRK44C）**：胶囊、任务完成、提问三类通知均产生 `focusType=PARAMS` 并在状态栏超级岛渲染（截图见第 9 节）；`canShowFocus` 经 LSPosed 闸门后返回 true；XMSF `AuthSession#b`、SystemUI `canShowFocus/canCustomFocus/checkSignatures` 钩子均已在 LSPosed 日志确认挂载。
-- **仍未验证**：虚拟屏/显示隔离（system_server 侧 `wm`、`IMMS`、`WindowStateAnimator` 等 hook 在真机日志报 `ClassNotFoundException`，见第 9 节），以及展开态大岛（`bigIslandArea`）的完整布局与岛内按钮点击效果。
+- **虚拟屏/显示隔离（2026-10-19 补测通过）**：`/api/start` 创建 `AgentVirtualDisplay`（display 2，1152×2496，dpi 480）；`/api/mode?mode=background` 把设置页迁移到 display 2 并截帧成功（HTTP 200）；`POST /api/action {"action":"launch_app","package":"com.android.settings"}` 在 display 2 冷启动成功并返回 24 个 UI 节点（`ok display=2 ... total=24 retries=1`）。即：system_server 那批 wm/IME hook 确实没挂上（日志 `ClassNotFoundException`），但基础副屏能力不依赖它们。
+- **仍未验证**：展开态大岛（`bigIslandArea`）的完整布局、岛内按钮（停止/切后台）点按效果；以及缺少 wm hook 时个别需要 `canBeLaunchedOnDisplay` 强校验的跨屏启动场景。
 - **编译校验口径**：已验证 `javac --release 8` 对 `android-28.jar`（targetSdk 28）与 `android-34.jar` 均零错误；仓库自带 `build.sh` 使用的是 `android-23` 平台包，而代码中 `TileService` 需要 API 24+，该 jar 本身无法编译本仓库（既有问题，本次未改动构建脚本）。
 - **字段名歧义**：官方指南示例写作 `miui.focus.paramtextInfo`（疑似 markdown 粘连），模板库与社区实现用 `textInfo`；本实现按 `textInfo` 输出，若真机不显示需 A/B 对照。
 - **协议字段**：`notification_focus_protocol` 只表示协议版本，不授予权限；本实现默认按 protocol 3 输出。
@@ -142,9 +143,14 @@ adb shell getprop ro.mi.os.version.name
 | `am broadcast -a ...ACTION_NOTIFY --ei total 8 --ei completed 8` | 完成通知 `focusType=PARAMS`，超级岛显示绿色 ✓ + 会话名 |
 | `am start -n .../.QuestionActivity --es request_id ... --es data '{"questions":[...]}'` | 提问通知 `focusType=PARAMS`，超级岛右侧显示琥珀色「?」 |
 | `dumpsys notification --noredact` | 三条通知 extras 均含 `miui.focus.param=String`、`miui.focus.pics=Bundle`、`miui.focus.actions=Bundle`，JSON 长度约 900 字节 |
+| 重启后复验（`START_FOREGROUND`） | 仍 `canShowFocus=true`、`Super island capsule attached (902 chars)`、`focusType=PARAMS`，岛正常显示 |
+| `POST /api/start` | `{"status":"running","display_id":2,"width":1152,"height":2496,"dpi":480}`；`dumpsys display` 出现 `AgentVirtualDisplay`（owner android, uid 0） |
+| `POST /api/mode?mode=foreground` + `/api/screenshot` | HTTP 200，205244 字节（截本机屏） |
+| `POST /api/mode?mode=background` + `/api/screenshot` | 迁移 `com.android.settings/com.android.settings.MainSettings`（task 1324）到 display 2，HTTP 200，203724 字节（1152×2496，实际 JPEG 数据） |
+| `POST /api/action {"action":"launch_app","package":"com.android.settings"}` | display 2 冷启动成功，UI dump 返回 `total=24 retries=1`，截图可见设置页在副屏渲染 |
 
 **遗留问题（未解决，如实记录）**
 
-- SystemUI/`android` 作用域下 `com.android.server.wm.*`、`InputMethodManagerService`、`WindowStateAnimator` 的 hook 报 `ClassNotFoundException`，即显示隔离那批 hook 在 HyperOS 4 上未真正挂载；虚拟屏行为需继续排查（可能与 LSPosed 在 system_server 中的 ClassLoader 选择有关）。
+- `android`/`system` 作用域下 `com.android.server.wm.*`（LogicalDisplay、ActivityTaskSupervisor、Task、RootWindowContainer 等）与 `InputMethodManagerService` 的 hook 报 `ClassNotFoundException`（即使加了 `lpparam.classLoader → Thread.contextClassLoader → Class.forName` 三级回退）；`WindowStateAnimator` 的截屏排除 hook 则挂载成功。即显示隔离那批 hook 在 HyperOS 4 上未真正挂载，但当次真机实测虚拟屏创建/迁移/启动/截屏/UI dump 全部可用，说明不是阻塞项；根因疑为 LSPosed 在 system_server 中给模块的 ClassLoader 与 wm 类实际加载器不一致，可在后续版本用延迟重试或 `ClassLoader.getSystemClassLoader()` 继续排查。
 - 展开态大岛、岛内按钮（停止/切后台）尚未点按验证。
 - 本例中 root 直接写 `/data/data/com.agent.mobileuse/shared_prefs/` 的开关会被应用运行中的回写覆盖，最终改用控制台开关，见第 1 节说明。
