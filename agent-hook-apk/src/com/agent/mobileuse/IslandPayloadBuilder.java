@@ -168,11 +168,16 @@ public final class IslandPayloadBuilder {
 
             v2.put("param_island", island);
 
-            if (outEffectColor != null && !outEffectColor.trim().isEmpty()) {
-                v2.put("outEffectColor", outEffectColor.trim());
-            }
+            // Outer glow: HyperIsland/SystemUI expect the sentinel "outer_glow"
+            // (not an image key). The island-scoped copy drives the ring drawn
+            // around the pill, the param_v2 copy drives the whole-island effect.
             if (outEffectSrc != null && !outEffectSrc.trim().isEmpty()) {
+                island.put("outEffectSrc", outEffectSrc.trim());
                 v2.put("outEffectSrc", outEffectSrc.trim());
+            }
+            if (outEffectColor != null && !outEffectColor.trim().isEmpty()) {
+                island.put("outEffectColor", outEffectColor.trim());
+                v2.put("outEffectColor", outEffectColor.trim());
             }
 
             JSONObject base = new JSONObject();

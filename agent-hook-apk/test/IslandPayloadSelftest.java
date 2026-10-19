@@ -240,18 +240,24 @@ public final class IslandPayloadSelftest {
     private static void testCompactGlowCapsule() throws Exception {
         String json = IslandPayloadBuilder.capsule(3, "前台接管", "会话 A", "虚拟屏后台运行中",
                 IslandPayloadBuilder.PIC_CAPSULE, true,
-                "#32ADE6", "miui.focus.pic_effect", null);
+                "#32ADE6", "outer_glow", null);
         JSONObject v2 = parse(json, "capsule-compact");
         if (v2 == null) {
             return;
         }
-        check("compact outEffectColor", "#32ADE6".equals(v2.optString("outEffectColor")));
-        check("compact outEffectSrc", "miui.focus.pic_effect".equals(v2.optString("outEffectSrc")));
+        check("compact outEffectSrc is the official sentinel",
+                "outer_glow".equals(v2.optString("outEffectSrc")));
         JSONObject island = requireObj(v2, "param_island", "capsule-compact");
+        check("param_island carries the glow sentinel",
+                island != null && "outer_glow".equals(island.optString("outEffectSrc")));
+        check("param_island carries the glow color",
+                island != null && "#32ADE6".equals(island.optString("outEffectColor")));
         JSONObject big = requireObj(island, "bigIslandArea", "capsule-compact");
-        check("compact bigIslandArea has textInfo", big != null && big.has("textInfo"));
-        check("compact bigIslandArea drops imageTextInfoLeft",
-                big != null && !big.has("imageTextInfoLeft"));
+        check("compact bigIslandArea is icon-only",
+                big != null && big.has("imageTextInfoLeft") && !big.has("textInfo"));
+        JSONObject left = big == null ? null : big.optJSONObject("imageTextInfoLeft");
+        check("compact imageTextInfoLeft has no textInfo",
+                left != null && left.has("picInfo") && !left.has("textInfo"));
         JSONObject small = requireObj(island, "smallIslandArea", "capsule-compact");
         check("compact smallIslandArea keeps pic", small != null && small.has("picInfo"));
 

@@ -223,18 +223,14 @@ public final class HyperIsland {
                     new IslandPayloadBuilder.ActionRef(IslandPayloadBuilder.PIC_ACTION_SWITCH,
                             "切后台", IslandPayloadBuilder.INTENT_BROADCAST),
             };
-            String glowPicKey = null;
-            Bitmap glowBitmap = null;
-            if (virtualDisplayRunning) {
-                glowBitmap = createRainbowGlowBitmap(256);
-                if (glowBitmap != null) {
-                    glowPicKey = IslandPayloadBuilder.PIC_KEY_PREFIX
-                            + IslandPayloadBuilder.PIC_EFFECT;
-                }
-            }
+            // Official outer-glow sentinel: SystemUI draws its own LightBg
+            // shader ring for "outer_glow"; an image key here is ignored.
+            String glowSrc = virtualDisplayRunning ? "outer_glow" : null;
+            // Empty colour lets SystemUI use its default multi-colour ramp.
+            String glowColor = null;
             String json = IslandPayloadBuilder.capsule(protocolVersion(context), stateTitle,
                     sessionTitle, hint, IslandPayloadBuilder.PIC_CAPSULE, true,
-                    glowPicKey == null ? null : "#32ADE6", glowPicKey, actions);
+                    glowColor, glowSrc, actions);
             if (json == null) {
                 return;
             }
@@ -245,9 +241,6 @@ public final class HyperIsland {
             if (iconObject != null) {
                 pics.putParcelable(IslandPayloadBuilder.PIC_KEY_PREFIX
                         + IslandPayloadBuilder.PIC_CAPSULE, iconObject);
-            }
-            if (glowBitmap != null) {
-                pics.putParcelable(glowPicKey, Icon.createWithBitmap(glowBitmap));
             }
             if (!pics.isEmpty()) {
                 extras.putBundle(EXTRA_PICS, pics);
