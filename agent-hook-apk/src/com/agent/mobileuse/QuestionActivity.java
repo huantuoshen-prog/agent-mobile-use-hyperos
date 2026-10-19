@@ -230,8 +230,9 @@ public class QuestionActivity extends Activity {
 
             builder.setContentTitle("有问题");
 
+            Bitmap questionIcon = null;
             try {
-                Bitmap questionIcon = createCyberQuestionBitmap(192);
+                questionIcon = createCyberQuestionBitmap(192);
                 if (questionIcon != null && Build.VERSION.SDK_INT >= 23) {
                     Icon icon = Icon.createWithBitmap(questionIcon);
                     builder.setSmallIcon(icon);
@@ -250,6 +251,9 @@ public class QuestionActivity extends Activity {
             bigStyle.setBigContentTitle(header);
             bigStyle.bigText(questionText);
             builder.setStyle(bigStyle);
+
+            // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
+            HyperIsland.attachQuestion(context, builder, header, questionText, questionIcon, sessionId);
 
             // Direct Jump to DemoDialogActivity (Web Console / 灵动坞) with target session
             Intent consoleIntent = new Intent(context, DemoDialogActivity.class);
@@ -279,7 +283,7 @@ public class QuestionActivity extends Activity {
         }
     }
 
-    private static Bitmap createCyberQuestionBitmap(int size) {
+    public static Bitmap createCyberQuestionBitmap(int size) {
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
 

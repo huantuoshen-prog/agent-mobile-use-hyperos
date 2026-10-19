@@ -1,11 +1,12 @@
 SKIPUNZIP=0
 
 ui_print "**********************************************"
-ui_print "*  Agent Mobile Sandbox & Tools v0.8.7-alpha *"
+ui_print "*  Agent Mobile Sandbox & Tools v0.9.0-alpha *"
 ui_print "*               作者：酸小明                 *"
 ui_print "**********************************************"
 
-ui_print "- 正在安装纯隐形 LSPosed 跨屏路由与输入法隔离补丁 (v0.8.7-alpha)..."
+ui_print "- 正在安装纯隐形 LSPosed 跨屏路由与输入法隔离补丁 (v0.9.0-alpha)..."
+ui_print "- 检测到 HyperOS/MIUI 时将启用超级岛(焦点通知)适配与 XMSF 校验解锁"
 pm install -r "$MODPATH/apk/agent_hook.apk" >/dev/null 2>&1
 if [ $? -eq 0 ]; then
     ui_print "- Hook 补丁安装成功"
@@ -29,6 +30,8 @@ if [ -f "$LSP_DB" ] && [ -x "$SQLITE_BIN" ]; then
         "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'system', 0);" 2>/dev/null
         "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.android.systemui', 0);" 2>/dev/null
         "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.agent.mobileuse', 0);" 2>/dev/null
+        # HyperOS/MIUI: XMSF verifies the focus-notification (super island) whitelist.
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.xiaomi.xmsf', 0);" 2>/dev/null
         ui_print "- LSPosed 作用域配置完成: $APK_PATH"
     fi
 fi

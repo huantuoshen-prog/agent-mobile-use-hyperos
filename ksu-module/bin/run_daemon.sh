@@ -52,13 +52,89 @@ export ANDROID_ART_ROOT=/apex/com.android.art
 export ANDROID_I18N_ROOT=/apex/com.android.i18n
 export ANDROID_TZDATA_ROOT=/apex/com.android.tzdata
 
+# ---------------------------------------------------------------------------
+# BOOTCLASSPATH discovery (AOSP / ColorOS / HyperOS-MIUI)
+# ---------------------------------------------------------------------------
+# app_process started outside zygote needs the runtime boot class path in the
+# environment or the VM aborts during startup.  Upstream hard-coded a
+# ColorOS/QCOM list: on HyperOS several of those jars are missing and the MIUI
+# jars are absent, so discover the real value instead.
+
+bootclasspath_from_environ() {
+    if [ -r "$1" ]; then
+        tr '\0' '\n' < "$1" 2>/dev/null | grep -m1 '^BOOTCLASSPATH=' | cut -d= -f2-
+    fi
+}
+
+bootclasspath_from_rc() {
+    for rc in /system/etc/init/hw/init.environ.rc /init.environ.rc; do
+        if [ -r "$rc" ]; then
+            line=$(grep -m1 'BOOTCLASSPATH' "$rc" 2>/dev/null)
+            if [ -n "$line" ]; then
+                echo "$line" | sed -e 's/.*BOOTCLASSPATH[[:space:]=]*//' -e "s/[\"']//g" -e 's/[[:space:]]*$//'
+            fi
+        fi
+    done
+}
+
 if [ -z "$BOOTCLASSPATH" ]; then
-    export BOOTCLASSPATH=/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/framework-location.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/system/framework/framework-ondeviceintelligence-platform.jar:/system/framework/framework-nfc.jar:/system/framework/tcmiface.jar:/system/framework/qcom.fmradio.jar:/system/framework/QPerformance.jar:/system/framework/UxPerformance.jar:/system/framework/WfdCommon.jar:/system/framework/oplus-framework.jar:/system/framework/subsystem-framework.jar:/apex/com.android.i18n/javalib/core-icu4j.jar:/apex/com.android.adservices/javalib/framework-adservices.jar:/apex/com.android.adservices/javalib/framework-sdksandbox.jar:/apex/com.android.appsearch/javalib/framework-appsearch.jar:/apex/com.android.configinfrastructure/javalib/framework-configinfrastructure.jar:/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.crashrecovery/javalib/framework-crashrecovery.jar:/apex/com.android.devicelock/javalib/framework-devicelock.jar:/apex/com.android.healthfitness/javalib/framework-healthfitness.jar:/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar:/apex/com.android.media/javalib/updatable-media.jar:/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar:/apex/com.android.mediaprovider/javalib/framework-pdf.jar:/apex/com.android.mediaprovider/javalib/framework-pdf-v.jar:/apex/com.android.mediaprovider/javalib/framework-photopicker.jar:/apex/com.android.ondevicepersonalization/javalib/framework-ondevicepersonalization.jar:/apex/com.android.os.statsd/javalib/framework-statsd.jar:/apex/com.android.permission/javalib/framework-permission.jar:/apex/com.android.permission/javalib/framework-permission-s.jar:/apex/com.android.profiling/javalib/framework-profiling.jar:/apex/com.android.scheduling/javalib/framework-scheduling.jar:/apex/com.android.sdkext/javalib/framework-sdkextensions.jar:/apex/com.android.tethering/javalib/framework-connectivity.jar:/apex/com.android.tethering/javalib/framework-connectivity-b.jar:/apex/com.android.tethering/javalib/framework-connectivity-t.jar:/apex/com.android.tethering/javalib/framework-tethering.jar:/apex/com.android.uwb/javalib/framework-ranging.jar:/apex/com.android.uwb/javalib/framework-uwb.jar:/apex/com.android.virt/javalib/framework-virtualization.jar:/apex/com.android.wifi/javalib/framework-wifi.jar
-
+    # 1) A live process environment is the most authoritative source.
+    for pidfile in /proc/1/environ \
+                   /proc/$(pidof zygote64 2>/dev/null)/environ \
+                   /proc/$(pidof zygote 2>/dev/null)/environ; do
+        CANDIDATE=$(bootclasspath_from_environ "$pidfile")
+        if [ -n "$CANDIDATE" ]; then
+            BOOTCLASSPATH="$CANDIDATE"
+            echo "[run_daemon] BOOTCLASSPATH <- $pidfile"
+            break
+        fi
+    done
 fi
+
+if [ -z "$BOOTCLASSPATH" ]; then
+    # 2) init.environ.rc (Android 14+ moved it under /system/etc/init/hw).
+    CANDIDATE=$(bootclasspath_from_rc | head -n1)
+    if [ -n "$CANDIDATE" ]; then
+        BOOTCLASSPATH="$CANDIDATE"
+        echo "[run_daemon] BOOTCLASSPATH <- init.environ.rc"
+    fi
+fi
+
+if [ -z "$BOOTCLASSPATH" ]; then
+    # 3) Last resort: candidate list filtered by existence on this ROM.
+    BOOT_JARS=""
+    for jar in /apex/com.android.art/javalib/core-oj.jar \
+               /apex/com.android.art/javalib/core-libart.jar \
+               /apex/com.android.art/javalib/okhttp.jar \
+               /apex/com.android.art/javalib/bouncycastle.jar \
+               /apex/com.android.art/javalib/apache-xml.jar \
+               /apex/com.android.i18n/javalib/core-icu4j.jar \
+               /system/framework/framework.jar \
+               /system/framework/framework-graphics.jar \
+               /system/framework/framework-location.jar \
+               /system/framework/ext.jar \
+               /system/framework/telephony-common.jar \
+               /system/framework/voip-common.jar \
+               /system/framework/ims-common.jar \
+               /system/framework/miui-framework.jar \
+               /system/framework/framework-ondeviceintelligence-platform.jar \
+               /system/framework/framework-nfc.jar \
+               /system/framework/oplus-framework.jar; do
+        [ -e "$jar" ] && BOOT_JARS="$BOOT_JARS:$jar"
+    done
+    BOOTCLASSPATH=$(echo "$BOOT_JARS" | sed 's/^://')
+    echo "[run_daemon] BOOTCLASSPATH <- fallback jar list"
+fi
+
+if [ -z "$BOOTCLASSPATH" ]; then
+    echo "[run_daemon] FATAL: cannot determine BOOTCLASSPATH; aborting before app_process" >&2
+    exit 1
+fi
+
 if [ -z "$DEX2OATBOOTCLASSPATH" ]; then
-    export DEX2OATBOOTCLASSPATH=/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/framework-location.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/system/framework/framework-ondeviceintelligence-platform.jar:/system/framework/framework-nfc.jar:/system/framework/tcmiface.jar:/system/framework/qcom.fmradio.jar:/system/framework/QPerformance.jar:/system/framework/UxPerformance.jar:/system/framework/WfdCommon.jar:/system/framework/oplus-framework.jar:/system/framework/subsystem-framework.jar:/apex/com.android.i18n/javalib/core-icu4j.jar
-
+    DEX2OATBOOTCLASSPATH="$BOOTCLASSPATH"
 fi
+export BOOTCLASSPATH DEX2OATBOOTCLASSPATH
+
 export CLASSPATH="$DEX_PATH"
 exec /system/bin/app_process /system/bin com.agent.DaemonMain "$WIDTH" "$HEIGHT" "$DPI"

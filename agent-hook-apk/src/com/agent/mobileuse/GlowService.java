@@ -322,6 +322,9 @@ public class GlowService extends Service {
             bigStyle.bigText(bigText);
             builder.setStyle(bigStyle);
 
+            // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
+            HyperIsland.attachCapsule(this, builder, capsuleTitle, displayTitle, bigText, iconBitmap);
+
             startForeground(NOTIFICATION_ID, builder.build());
             try {
                 android.content.SharedPreferences sp = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);

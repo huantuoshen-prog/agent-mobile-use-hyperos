@@ -74,7 +74,9 @@ public class SettingsActivity extends Activity {
     private TextView mTvStatusGatewayPort;
     private TextView mTvStatusMode;
     private TextView mTvStatusLsposed;
+    private TextView mTvStatusIsland;
     private Switch mSwitchFluidCloud;
+    private Switch mSwitchSuperIsland;
     private Switch mSwitchCompletionAlert;
     private Switch mSwitchLauncherIcon;
 
@@ -118,6 +120,20 @@ public class SettingsActivity extends Activity {
                 startGlowService(sIntent);
             } catch (Throwable ignored) {}
             Toast.makeText(SettingsActivity.this, isChecked ? "通知流体云化已开启" : "通知流体云化已关闭 (退回原生通知栏)", Toast.LENGTH_SHORT).show();
+        }
+    };
+
+    private final CompoundButton.OnCheckedChangeListener mSuperIslandChangeListener = new CompoundButton.OnCheckedChangeListener() {
+        @Override
+        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+            getSharedPreferences(PREFS_CAPSULE, Context.MODE_PRIVATE)
+                    .edit().putBoolean(HyperIsland.PREF_ENABLE, isChecked).commit();
+            try {
+                Intent sIntent = new Intent(SettingsActivity.this, GlowService.class);
+                sIntent.setAction("REFRESH");
+                startGlowService(sIntent);
+            } catch (Throwable ignored) {}
+            Toast.makeText(SettingsActivity.this, isChecked ? "超级岛通知已开启 (任务通知将上岛)" : "超级岛通知已关闭 (退回普通通知栏)", Toast.LENGTH_SHORT).show();
         }
     };
 
@@ -405,6 +421,7 @@ public class SettingsActivity extends Activity {
         mTvStatusGatewayPort = createStatusRow(portsCard, "网关服务", "[CHECKING] 3070");
         mTvStatusMode = createStatusRow(portsCard, "运行模式", "IDLE (待机)");
         mTvStatusLsposed = createStatusRow(portsCard, "LSPosed 模块", "[CHECKING...]");
+        mTvStatusIsland = createStatusRow(portsCard, "超级岛", "[CHECKING...]");
         layout.addView(portsCard);
 
         // 2. 系统特性偏好
@@ -430,6 +447,14 @@ public class SettingsActivity extends Activity {
         LinearLayout rowLauncher = createSwitchRow("桌面图标快捷方式", mSwitchLauncherIcon);
         mSwitchLauncherIcon.setOnCheckedChangeListener(mLauncherIconChangeListener);
         prefsCard.addView(rowLauncher);
+        prefsCard.addView(createCardDivider());
+
+        // Switch 4: HyperOS 超级岛 (焦点通知). Default off; only meaningful on MIUI/HyperOS.
+        mSwitchSuperIsland = new Switch(this);
+        LinearLayout rowIsland = createSwitchRow("超级岛通知（HyperOS）", mSwitchSuperIsland);
+        mSwitchSuperIsland.setOnCheckedChangeListener(mSuperIslandChangeListener);
+        mSwitchSuperIsland.setEnabled(HyperIsland.isHyperOs());
+        prefsCard.addView(rowIsland);
 
         layout.addView(prefsCard);
 
@@ -775,6 +800,7 @@ public class SettingsActivity extends Activity {
     private void syncSwitchesState() {
         SharedPreferences spCapsule = getSharedPreferences(PREFS_CAPSULE, Context.MODE_PRIVATE);
         setSwitchCheckedSilently(mSwitchFluidCloud, spCapsule.getBoolean("enable_fluid_cloud", true), mFluidCloudChangeListener);
+        setSwitchCheckedSilently(mSwitchSuperIsland, HyperIsland.isEnabled(this), mSuperIslandChangeListener);
         setSwitchCheckedSilently(mSwitchCompletionAlert, spCapsule.getBoolean("enable_completion_alert", true), mCompletionAlertChangeListener);
         setSwitchCheckedSilently(mSwitchGlowFrame, spCapsule.getBoolean("enable_glow_frame", true), mGlowFrameChangeListener);
 
@@ -847,6 +873,9 @@ public class SettingsActivity extends Activity {
                 // 6. Direct LSPosed self-hook probe
                 final boolean lspDirect = isModuleActive();
 
+                // 7. HyperOS super island capability snapshot
+                final String islandState = HyperIsland.describeState(SettingsActivity.this);
+
                 mHandler.post(new Runnable() {
                     @Override
                     public void run() {
@@ -915,6 +944,19 @@ public class SettingsActivity extends Activity {
                             } else {
                                 mTvStatusLsposed.setText("[INACTIVE]");
                                 mTvStatusLsposed.setTextColor(Color.parseColor("#F85149"));
+                            }
+                        }
+
+                        // Update HyperOS super island status
+                        if (mTvStatusIsland != null) {
+                            mTvStatusIsland.setText(islandState);
+                            String state = islandState == null ? "" : islandState;
+                            if (state.startsWith("已开启")) {
+                                mTvStatusIsland.setTextColor(Color.parseColor("#49E9A6"));
+                            } else if (state.startsWith("系统未授权")) {
+                                mTvStatusIsland.setTextColor(Color.parseColor("#E3B341"));
+                            } else {
+                                mTvStatusIsland.setTextColor(Color.parseColor("#8B949E"));
                             }
                         }
 

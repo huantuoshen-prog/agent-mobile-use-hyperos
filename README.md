@@ -12,7 +12,7 @@
 通过底层的特权虚拟显示器（Virtual Display）、LSPosed 跨屏调度与输入法隔离、以及免软键盘弹窗的文字注入，让 Agent 能够操作手机上的应用。
 
 > ⚠️ **版本说明（SemVer 标准化）**：  
-> 本项目遵循语义化版本规范（Semantic Versioning）。当前最新发行版本为 **`v0.8.7-alpha`**（KSU 模块 versionCode: `807`）。包含原生控制中心（`SettingsActivity`）、流体云通知胶囊，以及基于 3080 端口 Remote RPC 的 DSH 版本握手。
+> 本项目遵循语义化版本规范（Semantic Versioning）。当前开发版本为 **`v0.9.0-alpha`**（KSU 模块 versionCode: `900`），在 `v0.8.7-alpha` 基础上新增 **HyperOS / MIUI 超级岛（焦点通知）适配**（默认关闭，见 [docs/hyperos.md](docs/hyperos.md)）、动态 `BOOTCLASSPATH` 发现与 `com.xiaomi.xmsf` 作用域。原有 ColorOS 流体云、原生控制中心（`SettingsActivity`）与 3080 Remote RPC 握手行为不变。
 
 ---
 
@@ -159,12 +159,12 @@
 #### 方式一：直接刷入发行版（推荐）
 
 1. 从 `release/` 目录或 GitHub Releases 下载最新的刷机包：
-   **`agent-mobile-use-ksu-v0.8.7-alpha.zip`**
+   **`agent-mobile-use-ksu-v0.9.0-alpha.zip`**
 2. 将 zip 文件传输至手机中。
 3. 打开 **KernelSU** (或 APatch / Magisk) 管理器 -> 点击「模块」-> 选择该 zip 进行安装。
 4. 安装过程中脚本会自动完成以下动作：
    - 安装静默控制底座 APK (`agent_hook.apk`)；
-   - 自动检测本地 LSPosed 数据库并激活 `system`、`android`、`com.android.systemui` 作用域；
+   - 自动检测本地 LSPosed 数据库并激活 `system`、`android`、`com.android.systemui` 作用域，HyperOS/MIUI 上额外激活 `com.xiaomi.xmsf`；
    - 将 `vd` 部署至 `/system/bin/vd`。
 5. 重启手机使 LSPosed Hook 与系统服务挂载生效。
 
@@ -175,6 +175,17 @@
 - 编译 Hook APK：进入 `agent-hook-apk/` 目录，执行 `./build.sh`。
 - 组装并打包：在 `ksu-module/` 执行 `./pack.sh` 生成模块 zip。
 
+### HyperOS / MIUI 超级岛适配（v0.9.0-alpha，默认关闭）
+
+HyperOS 的「超级岛」由焦点通知（`miui.focus.param` extras）驱动，其白名单由 SystemUI 权限闸门与 XMSF 签名校验双层控制；第三方应用无官方自助开通入口（只提供 `canShowFocus` 查询，开通需邮件申请 `mipush-permission@xiaomi.com`）。本模块用 LSPosed 在系统侧解锁这两层校验，并在通知里附加岛 JSON：
+
+- `HyperIsland.java`：ROM/能力探测（`ro.mi.os.version.name`、`persist.sys.feature.island`、`canShowFocus`、`notification_focus_protocol`）+ 三类通知（胶囊 / 完成 / 提问）的岛数据挂载；
+- `IslandPayloadBuilder.java`：纯 JSON 构造（≤3072 字节），不依赖 Android 类，可在 JVM 上单测；
+- `HookEntry.java`：HyperOS 分支 hook `NotificationSettingsManager#canShowFocus/canCustomFocus`、`focus.SignatureChecker#checkSignatures` 返回 true，`FocusNotificationPluginImpl#onNotificationPosted` 放行本应用，插件 ClassLoader 二次挂钩；XMSF 进程 hook `com.xiaomi.xms.auth.AuthSession#b`；
+- `run_daemon.sh`：`BOOTCLASSPATH` 改为 `/proc/1/environ` → `init.environ.rc` → 存在性过滤列表三级发现，不再硬编码 ColorOS/QCOM 路径。
+
+详见 [docs/hyperos.md](docs/hyperos.md)（原理、开启方式、真机验证命令、故障恢复）。该功能**默认关闭**，入口：设置页「系统特性偏好 → 超级岛通知（HyperOS）」；关闭时行为与 v0.8.7-alpha 普通通知一致。
+
 ---
 
 <a name="english"></a>
@@ -184,8 +195,8 @@
 
 By decoupling execution onto an independent virtual display (Display > 0), intercepting task/activity focus switches with LSPosed hooks, and injecting text via accessibility without popping up soft keyboards, it lets the agent drive apps while you keep using the phone.
 
-> ⚠️ **Release Notice (v0.8.7-alpha)**:  
-> Current active release is **`v0.8.7-alpha`** (KSU module versionCode: `807`). Includes the native control center (`SettingsActivity`), the fluid-cloud notification capsule, and DSH version handshake over the 3080 Remote RPC.
+> ⚠️ **Release Notice (v0.9.0-alpha)**:  
+> Current development release is **`v0.9.0-alpha`** (KSU module versionCode: `900`), adding **HyperOS / MIUI super island (focus notification) support** (disabled by default, see [docs/hyperos.md](docs/hyperos.md)), dynamic `BOOTCLASSPATH` discovery and the `com.xiaomi.xmsf` scope on top of v0.8.7-alpha. ColorOS fluid cloud, the native control center and the 3080 Remote RPC handshake are unchanged.
 
 ---
 

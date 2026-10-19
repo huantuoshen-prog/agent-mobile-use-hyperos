@@ -23,6 +23,7 @@ public class NotifyReceiver extends BroadcastReceiver {
     public static final String ACTION_NOTIFY = "com.agent.mobileuse.ACTION_NOTIFY";
     public static final String ACTION_CLEAR = "com.agent.mobileuse.ACTION_CLEAR";
     public static final String ACTION_HANDOFF = "com.agent.mobileuse.ACTION_HANDOFF";
+    public static final String ACTION_ISLAND = "com.agent.mobileuse.ACTION_ISLAND";
 
     public static final String CHANNEL_ID = "dsh_agent_completed";
     public static final String CHANNEL_ID_SILENT = "dsh_agent_completed_silent";
@@ -56,26 +57,24 @@ public class NotifyReceiver extends BroadcastReceiver {
 
         if (ACTION_HANDOFF.equals(action)) {
             Log.i(TAG, "ACTION_HANDOFF received from Fluid Cloud click! Triggering handoff to background...");
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        java.net.URL url = new java.net.URL("http://127.0.0.1:3070/api/mode?mode=background");
-                        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                        conn.setRequestMethod("GET");
-                        conn.setConnectTimeout(1500);
-                        conn.setReadTimeout(1500);
-                        int code = conn.getResponseCode();
-                        Log.i(TAG, "Mode switch (background) finished, response code: " + code);
-                        conn.disconnect();
-                    } catch (Throwable t) {
-                        Log.w(TAG, "HTTP mode switch error, trying curl fallback: " + t.getMessage());
-                        try {
-                            Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", "curl -s 'http://127.0.0.1:3070/api/mode?mode=background'"}).waitFor();
-                        } catch (Throwable ignored) {}
-                    }
-                }
-            }).start();
+            requestBackgroundMode();
+            return;
+        }
+
+        if (ACTION_ISLAND.equals(action)) {
+            String islandAction = intent.getStringExtra(HyperIsland.EXTRA_ISLAND_ACTION);
+            Log.i(TAG, "ACTION_ISLAND received: " + islandAction);
+            if (HyperIsland.ACTION_STOP.equals(islandAction)) {
+                stopCapsule(context, nm);
+            } else if (HyperIsland.ACTION_SWITCH_BACKGROUND.equals(islandAction)) {
+                requestBackgroundMode();
+            } else if (HyperIsland.ACTION_CLEAR.equals(islandAction)) {
+                nm.cancel(tag, id);
+            } else if (HyperIsland.ACTION_IGNORE.equals(islandAction)) {
+                nm.cancel(QuestionActivity.NOTIFICATION_ID);
+            } else {
+                Log.w(TAG, "Unknown island action: " + islandAction);
+            }
             return;
         }
 
@@ -104,6 +103,50 @@ public class NotifyReceiver extends BroadcastReceiver {
                 postCompletedNotification(context, nm, tag, id, title, sessionTitle, content, sessionId);
             }
         }
+    }
+
+    /** Ask the local gateway to switch the agent into background takeover mode. */
+    private static void requestBackgroundMode() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    java.net.URL url = new java.net.URL("http://127.0.0.1:3070/api/mode?mode=background");
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(1500);
+                    conn.setReadTimeout(1500);
+                    int code = conn.getResponseCode();
+                    Log.i(TAG, "Mode switch (background) finished, response code: " + code);
+                    conn.disconnect();
+                } catch (Throwable t) {
+                    Log.w(TAG, "HTTP mode switch error, trying curl fallback: " + t.getMessage());
+                    try {
+                        Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", "curl -s 'http://127.0.0.1:3070/api/mode?mode=background'"}).waitFor();
+                    } catch (Throwable ignored) {}
+                }
+            }
+        }).start();
+    }
+
+    /** Island "stop" button: tear the capsule down without a background service start. */
+    private static void stopCapsule(Context context, NotificationManager nm) {
+        try {
+            context.stopService(new Intent(context, GlowService.class));
+        } catch (Throwable t) {
+            Log.w(TAG, "stopService(GlowService) failed: " + t.getMessage());
+        }
+        try {
+            nm.cancel(10086);
+        } catch (Throwable ignored) {}
+        try {
+            android.content.SharedPreferences prefs =
+                    context.getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
+            // Keep the user's opt-in island preference; only the capsule state is reset.
+            boolean superIsland = prefs.getBoolean(HyperIsland.PREF_ENABLE, false);
+            prefs.edit().clear().putBoolean(HyperIsland.PREF_ENABLE, superIsland).apply();
+        } catch (Throwable ignored) {}
+        Log.i(TAG, "Capsule stopped from super island action");
     }
 
     /**
@@ -272,8 +315,9 @@ public class NotifyReceiver extends BroadcastReceiver {
             builder.setStyle(bigStyle);
 
             // Set SmallIcon and LargeIcon to transparent vector Cyber Checkmark
+            Bitmap checkIcon = null;
             try {
-                Bitmap checkIcon = createCyberCheckmarkBitmap(192);
+                checkIcon = createCyberCheckmarkBitmap(192);
                 if (checkIcon != null && Build.VERSION.SDK_INT >= 23) {
                     Icon icon = Icon.createWithBitmap(checkIcon);
                     builder.setSmallIcon(icon);
@@ -290,6 +334,9 @@ public class NotifyReceiver extends BroadcastReceiver {
             } catch (Throwable t) {
                 builder.setSmallIcon(R.drawable.dsh_whale_icon);
             }
+
+            // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
+            HyperIsland.attachCompleted(context, builder, cardHeaderTitle, cleanContent, checkIcon, sessionId);
 
             if (enableAlert) {
                 builder.setDefaults(Notification.DEFAULT_ALL);

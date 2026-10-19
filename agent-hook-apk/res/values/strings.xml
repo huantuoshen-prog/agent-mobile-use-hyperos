@@ -5,5 +5,6 @@
         <item>android</item>
         <item>com.android.systemui</item>
         <item>com.agent.mobileuse</item>
+        <item>com.xiaomi.xmsf</item>
     </string-array>
 </resources>

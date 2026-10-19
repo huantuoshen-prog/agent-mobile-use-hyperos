@@ -17,9 +17,13 @@ public class HookEntry implements IXposedHookLoadPackage {
         if ("android".equals(lpparam.packageName) || "system".equals(lpparam.packageName)) {
             hookSystemServer(lpparam);
         }
-        // Hook SystemUI (ColorOS Fluid Cloud)
+        // Hook SystemUI (ColorOS Fluid Cloud / HyperOS super island)
         if ("com.android.systemui".equals(lpparam.packageName)) {
             hookSystemUI(lpparam);
+        }
+        // Hook Xiaomi XMSF auth (HyperOS focus-notification whitelist verification)
+        if ("com.xiaomi.xmsf".equals(lpparam.packageName)) {
+            hookXmsf(lpparam);
         }
         // Hook self (SettingsActivity activation check)
         if ("com.agent.mobileuse".equals(lpparam.packageName)) {
@@ -58,8 +62,32 @@ public class HookEntry implements IXposedHookLoadPackage {
         // Exclude AgentMobileEdgeGlow window from screenshot capture
         hookEdgeGlowScreenshotExclusion(cl);
 
-        // Intercept Action Button on OnePlus 13 (ColorOS) to launch DemoDialogActivity
-        hookActionButton(cl);
+        // Intercept Action Button on OnePlus 13 (ColorOS) to launch DemoDialogActivity.
+        // HyperOS has no equivalent: the Xiaomi AI button only honors system preset
+        // mappings and emits no standard KeyEvent, so there is nothing to hook there.
+        if (!isHyperOsRom()) {
+            hookActionButton(cl);
+        }
+    }
+
+    /** ROM probe: true for MIUI / HyperOS. */
+    static boolean isHyperOsRom() {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            java.lang.reflect.Method get = sp.getMethod("get", String.class);
+            Object miOs = get.invoke(null, "ro.mi.os.version.name");
+            if (miOs instanceof String && !((String) miOs).trim().isEmpty()) {
+                return true;
+            }
+            Object miui = get.invoke(null, "ro.miui.ui.version.name");
+            if (miui instanceof String && !((String) miui).trim().isEmpty()) {
+                return true;
+            }
+            String manufacturer = android.os.Build.MANUFACTURER;
+            return manufacturer != null && "xiaomi".equalsIgnoreCase(manufacturer.trim());
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private void hookAllMethodsReturningTrue(ClassLoader cl, String className, String methodName) {
@@ -261,6 +289,11 @@ public class HookEntry implements IXposedHookLoadPackage {
         XposedBridge.log("[AgentMobileUseHook] SystemUI loaded: " + lpparam.packageName);
         ClassLoader cl = lpparam.classLoader;
 
+        if (isHyperOsRom()) {
+            hookHyperOsSystemUI(lpparam);
+            return;
+        }
+
         // 1. Hook OplusLiveAlertFilters.shouldFilter to allow designated com.agent.mobileuse notifications
         try {
             Class<?> filtersClass = XposedHelpers.findClass(
@@ -324,5 +357,160 @@ public class HookEntry implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log("[AgentMobileUseHook] Failed to hook OplusLiveAlertFilterByPlugin: " + t.getMessage());
         }
+    }
+
+    // ------------------------------------------------------------------
+    // HyperOS / MIUI super island (焦点通知 / 超级岛)
+    // ------------------------------------------------------------------
+
+    /**
+     * Unlock focus notifications for com.agent.mobileuse on HyperOS.
+     *
+     * <p>Two independent gates exist and both must return true:
+     * <ol>
+     *   <li>{@code miui.systemui.notification.NotificationSettingsManager
+     *       #canShowFocus / #canCustomFocus} - the per-app permission check.</li>
+     *   <li>{@code miui.systemui.notification.focus.SignatureChecker
+     *       #checkSignatures} - the signature/partner whitelist inside the
+     *       focus-notification SystemUI plugin (HyperOS 3+).</li>
+     * </ol>
+     * On newer ROMs those classes are loaded by a plugin ClassLoader, so the same
+     * hooks are re-applied from {@code PluginFactory#createPluginContext}.
+     */
+    private void hookHyperOsSystemUI(XC_LoadPackage.LoadPackageParam lpparam) {
+        ClassLoader cl = lpparam.classLoader;
+        hookFocusGates(cl, false);
+
+        // Never let the focus-notification pipeline drop our own notification.
+        // FocusNotificationPluginImpl#onNotificationPosted returns true = drop.
+        try {
+            Class<?> impl = XposedHelpers.findClass(
+                    "miui.systemui.notification.FocusNotificationPluginImpl", cl);
+            XposedBridge.hookAllMethods(impl, "onNotificationPosted", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    if (param.args == null || param.args.length == 0 || param.args[0] == null) {
+                        return;
+                    }
+                    String pkg = (String) invokeNoArg(param.args[0], "getPackageName");
+                    if ("com.agent.mobileuse".equals(pkg)) {
+                        param.setResult(Boolean.FALSE); // false = keep this notification
+                    }
+                }
+            });
+            XposedBridge.log("[AgentMobileUseHook] FocusNotificationPluginImpl.onNotificationPosted hooked");
+        } catch (Throwable t) {
+            XposedBridge.log("[AgentMobileUseHook] FocusNotificationPluginImpl hook skipped: " + t.getMessage());
+        }
+
+        // OS3+ ships the focus-notification UI as a SystemUI plugin whose classes
+        // live in a child ClassLoader; install the gates again on that loader.
+        try {
+            Class<?> factory = XposedHelpers.findClass(
+                    "com.android.systemui.shared.plugins.PluginInstance$PluginFactory", cl);
+            XposedBridge.hookAllMethods(factory, "createPluginContext", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    Object pluginContext = param.getResult();
+                    if (pluginContext == null) {
+                        return;
+                    }
+                    Object loader = invokeNoArg(pluginContext, "getClassLoader");
+                    if (loader instanceof ClassLoader) {
+                        hookFocusGates((ClassLoader) loader, true);
+                    }
+                }
+            });
+            XposedBridge.log("[AgentMobileUseHook] PluginFactory.createPluginContext hooked for focus plugin loader");
+        } catch (Throwable t) {
+            XposedBridge.log("[AgentMobileUseHook] PluginFactory hook skipped: " + t.getMessage());
+        }
+    }
+
+    /** Install the canShowFocus / checkSignatures gates on one ClassLoader. */
+    private void hookFocusGates(ClassLoader cl, boolean quiet) {
+        hookAllMethodsReturningTrueQuiet(cl,
+                "miui.systemui.notification.NotificationSettingsManager", "canShowFocus", quiet);
+        hookAllMethodsReturningTrueQuiet(cl,
+                "miui.systemui.notification.NotificationSettingsManager", "canCustomFocus", quiet);
+        hookAllMethodsReturningTrueQuiet(cl,
+                "miui.systemui.notification.focus.SignatureChecker", "checkSignatures", quiet);
+    }
+
+    /** Same as {@link #hookAllMethodsReturningTrue} but failure logging is optional. */
+    private void hookAllMethodsReturningTrueQuiet(ClassLoader cl, String className,
+                                                  String methodName, boolean quiet) {
+        try {
+            Class<?> clazz = XposedHelpers.findClass(className, cl);
+            XposedBridge.hookAllMethods(clazz, methodName, XC_MethodReplacement.returnConstant(Boolean.TRUE));
+            XposedBridge.log("[AgentMobileUseHook] " + className + "#" + methodName + " -> true");
+        } catch (Throwable t) {
+            if (!quiet) {
+                XposedBridge.log("[AgentMobileUseHook] Failed to hook " + className + "#"
+                        + methodName + ": " + t.getMessage());
+            }
+        }
+    }
+
+    /**
+     * XMSF half of the focus-notification whitelist: {@code
+     * com.xiaomi.xms.auth.AuthSession} verifies the partner signature and calls
+     * the failure callback {@code b(Throwable)}. Clearing the error code field
+     * {@code a} and invoking the success callback {@code h()} makes verification
+     * pass, mirroring the well-known HyperIsland approach.
+     */
+    private void hookXmsf(XC_LoadPackage.LoadPackageParam lpparam) {
+        XposedBridge.log("[AgentMobileUseHook] XMSF loaded, hooking focus auth: " + lpparam.packageName);
+        try {
+            Class<?> authSession = XposedHelpers.findClass("com.xiaomi.xms.auth.AuthSession",
+                    lpparam.classLoader);
+            XposedBridge.hookAllMethods(authSession, "b", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    if (param.args == null || param.args.length != 1
+                            || !(param.args[0] instanceof Throwable)) {
+                        return;
+                    }
+                    Object session = param.thisObject;
+                    try {
+                        java.lang.reflect.Field codeField = findFieldInHierarchy(session.getClass(), "a");
+                        if (codeField != null && codeField.getType() == int.class) {
+                            codeField.setAccessible(true);
+                            codeField.setInt(session, 0);
+                        }
+                    } catch (Throwable ignored) {}
+                    try {
+                        java.lang.reflect.Method success = findMethodInHierarchy(session.getClass(), "h");
+                        if (success != null) {
+                            success.setAccessible(true);
+                            param.setResult(success.invoke(session));
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            XposedBridge.log("[AgentMobileUseHook] com.xiaomi.xms.auth.AuthSession#b hooked");
+        } catch (Throwable t) {
+            XposedBridge.log("[AgentMobileUseHook] Failed to hook XMSF AuthSession: " + t.getMessage());
+        }
+    }
+
+    /** Find a declared field on the class or any superclass. */
+    private static java.lang.reflect.Field findFieldInHierarchy(Class<?> clazz, String name) {
+        for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredField(name);
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    /** Find a declared no-arg method on the class or any superclass. */
+    private static java.lang.reflect.Method findMethodInHierarchy(Class<?> clazz, String name) {
+        for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredMethod(name);
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 }
