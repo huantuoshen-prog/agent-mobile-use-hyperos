@@ -156,7 +156,12 @@ public class QuestionActivity extends Activity {
             }
         } catch (Throwable ignored) {}
         try {
-            getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE).edit().clear().apply();
+            getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE).edit()
+                    .remove("mode")
+                    .remove("session_id")
+                    .remove("session_title")
+                    .remove("last_completed_sid")
+                    .apply();
         } catch (Throwable ignored) {}
     }
 

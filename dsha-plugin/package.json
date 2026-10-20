@@ -1,7 +1,7 @@
 {
   "name": "dsh-mobile-use",
-  "version": "0.1.0",
-  "description": "DSH tools for agent-mobile-use (root virtual display + super island gateway on 127.0.0.1:3070)",
+  "version": "0.2.0",
+  "description": "DSH tools and usage guide for agent-mobile-use (root virtual display + HyperOS super island gateway on 127.0.0.1:3070)",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

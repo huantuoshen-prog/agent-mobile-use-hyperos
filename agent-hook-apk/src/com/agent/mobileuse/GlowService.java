@@ -413,8 +413,7 @@ public class GlowService extends Service {
             hideGlow();
         } else if ("STOP".equals(action)) {
             try {
-                android.content.SharedPreferences sp = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
-                sp.edit().clear().apply();
+                clearRuntimeState();
             } catch (Throwable ignored) {}
             hideGlow();
             stopForeground(true);
@@ -596,10 +595,23 @@ public class GlowService extends Service {
             }
         } catch (Throwable ignored) {}
         try {
-            android.content.SharedPreferences sp = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
-            sp.edit().clear().apply();
+            clearRuntimeState();
         } catch (Throwable ignored) {}
         super.onDestroy();
+    }
+
+    /**
+     * 只清理本次运行态（模式/会话），保留用户在控制台里设置的开关，
+     * 否则任何一次 STOP / onDestroy 都会把「超级岛通知」等开关一起清掉。
+     */
+    private void clearRuntimeState() {
+        android.content.SharedPreferences sp = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
+        sp.edit()
+                .remove("mode")
+                .remove("session_id")
+                .remove("session_title")
+                .remove("last_completed_sid")
+                .apply();
     }
 
     private static class GlowView extends View {
