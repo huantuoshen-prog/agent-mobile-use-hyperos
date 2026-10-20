@@ -90,3 +90,14 @@ rm -f  /root/.dsh/profiles/web/node_modules/dsh-mobile-use
 - 网关 `3070` **无鉴权**，只监听回环；本插件不改变这一点。
 - 不要把 3070 暴露到局域网，也不要在其上叠加宽松 CORS 的网页调用。
 - 虚拟屏需要 root 模块；插件本身不申请任何新权限。
+
+## v0.2.0：给模型的使用指引
+
+- 插件新增 `systemPrompt` section `dsh:mobile-use-guide`（`lib/index.js`），在会话开头告诉模型：
+  - 什么时候用本插件（后台虚拟屏、任务进度/完成上岛）而不是 `dsha-android`；
+  - 标准顺序 `mobile_status → mobile_start → mobile_mode → mobile_ui_dump → mobile_action → mobile_notify/mobile_question → mobile_stop`；
+  - 截图/读屏前必须把 mode 切到非 idle；
+  - 「超级岛通知（HyperOS）」开关没开时**不要反复重试工具**，直接告诉用户去控制台打开。
+- 修复配套的内核问题：旧版 `GlowService.onDestroy` / `QuestionActivity.dismissCapsule` 会 `clear()` 整个
+  `agent_capsule_state`，把控制台里的开关（含超级岛）一起清掉，导致「开关自己变回关闭、通知退回普通栏」。
+  v0.9.0-alpha 起只清运行态键（mode/session_id/session_title/last_completed_sid），保留用户开关。
