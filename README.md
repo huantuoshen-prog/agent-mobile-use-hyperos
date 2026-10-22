@@ -1,262 +1,113 @@
-# Agent Mobile Use - Android 虚拟副屏与无感后台控制底座
+# Agent Mobile Use · DSHA Root 副屏
 
-[English](#english) | [中文说明](#中文说明)
+**面向使用 DSHA 且手机已 root 的用户，提供方便的后台虚拟副屏，并适配小米超级岛。**
 
----
+DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、读屏和操作。任务进行、前台控制、后台副屏、等待回答、完成、失败和停止等状态会同步到超级岛，手机上可以查看进展、进入 DSHA 或停止任务。
 
-<a name="中文说明"></a>
-## 中文说明
+[下载 v0.10.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.10.md) · [English](#english)
 
-本项目是供 **DeepSeek Harness (DSH)** 使用的 Mobile Use 工具，提供一套 Android 设备控制能力：在后台独立虚拟副屏中运行应用，与物理主屏互不干扰。
+![DSHA Root 副屏与超级岛真机展示](docs/images/v0.10/showcase.png)
 
-通过底层的特权虚拟显示器（Virtual Display）、LSPosed 跨屏调度与输入法隔离、以及免软键盘弹窗的文字注入，让 Agent 能够操作手机上的应用。
+*图片来自 2026-10-21 真机截图，仅裁剪、缩放和拼版。展开卡片可查看任务说明并停止任务；收起后显示紧凑胶囊。*
 
-> ⚠️ **版本说明（SemVer 标准化）**：  
-> 本项目遵循语义化版本规范（Semantic Versioning）。当前开发版本为 **`v0.9.0-alpha`**（KSU 模块 versionCode: `900`），在 `v0.8.7-alpha` 基础上新增 **HyperOS / MIUI 超级岛（焦点通知）适配**（默认关闭，见 [docs/hyperos.md](docs/hyperos.md)）、动态 `BOOTCLASSPATH` 发现与 `com.xiaomi.xmsf` 作用域。原有 ColorOS 流体云、原生控制中心（`SettingsActivity`）与 3080 Remote RPC 握手行为不变。
+## 能做什么
 
----
+- **后台虚拟副屏**：将应用启动到模块创建的副屏，通过 DSHA 工具截图、读取控件和操作，支持与物理主屏切换。
+- **DSHA 直接调用**：配套插件注册十五个工具，提供副屏创建、回收、缩放、截图、读屏、输入、应用枚举和音频设置等能力。
+- **小米超级岛**：按真实任务阶段切换图标、颜色和内容，后台副屏带外圈光效；等待状态保持单个紧凑胶囊。
+- **自动同步任务状态**：监听 DSHA 宿主事件，结束状态由整轮任务结果确认；todo 清单提供实际进度数量。
+- **手机端停止**：通知按钮绑定当前会话和轮次，发送停止请求并等待 DSHA 确认结果。
 
-### 实测记录：用系统画笔手绘一幅画
+## 环境
 
-📺 **B站高清实机演示视频**：[https://www.bilibili.com/video/BV1WYeS6YEwt](https://www.bilibili.com/video/BV1WYeS6YEwt)
+| 项目 | 本次验证环境 |
+| --- | --- |
+| DSHA | Android App build170，DSH 0.2.0-rc.2 |
+| 模块 | KernelSU + LSPosed，模块 0.10.0-alpha |
+| 手机 | Redmi K90，HyperOS 4 / Android 17，ARM64 |
+| 配套插件 | dsh-mobile-use 0.3.0 |
 
-底层虚拟副屏不仅能响应离散的按钮点击，更能承受高密度、高频次的连续物理手势调度。
+核心使用路径：**DSHA → mobile-use 插件 → 本机网关 → KSU 模块副屏**。模块副屏不要求开启 DSHA 的 Root Shell 开关或创建 DSHA 自带副屏；模块运行所需的 root 由模块环境提供。
 
-在与 DeepSeek Harness (DSH) 配合测试中，Agent 接到指令 **“去我的便签里面，用绘制的方式（用系统的笔）随便画一幅画吧！要手绘噢！”**。在后台完全静默的副屏上拉起便签画板，自主进行了 **105 步精细运笔手势**，一手一手纯手绘创作完成了整幅风景画：
+小米超级岛需要设备支持及相应的 LSPosed 作用域。ColorOS 路径保留，其他 ROM 和 Android 版本尚未完成本轮真机验收。
 
-| DSH 交互执行链路 (1 轮 105 步连续触控) | 副屏纯手绘作画最终成品 (系统便签画板) |
-| :---: | :---: |
-| <img src="docs/images/dsh_drawing_task.jpg" width="340" alt="DSH Task Execution" /> | <img src="docs/images/drawn_landscape.jpg" width="340" alt="Drawn Landscape Result" /> |
+## 安装
 
-整个手绘过程完全在后台虚拟副屏中发生，手机物理主屏完全不受影响，真正做到了“你在主屏聊天刷剧，Agent 在后台副屏手绘作画”。
+从 [Release](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) 下载两个 ZIP：
 
----
+| 文件 | 用途 |
+| --- | --- |
+| `agent-mobile-use-ksu-v0.10.0-alpha.zip` | 在 KernelSU 管理器安装，包含网关、运行时和控制台 APK |
+| `dsh-mobile-use-0.3.0.zip` | 在 DSHA 自带插件管理器导入 |
+| `SHA256SUMS.txt` / `live-agent-0.10.0-manifest.json` | 下载校验及包内二进制校验 |
 
-### 试验环境声明 (Test Environment)
+1. 安装 KSU 模块，确认 LSPosed 中本模块已启用，然后重启并首次解锁手机。
+2. 从 LSPosed 的模块设置入口打开控制中心，确认网关 ONLINE、LSPosed ACTIVE。允许控制台发送通知，开启“超级岛通知（HyperOS）”。
+3. 在 DSHA 的插件管理器导入插件 ZIP，按界面提示确认安装，重启 DSHA Web。
+4. 确认 `dsh-mobile-use` 已加载；让 DSHA 调用 `mobile_status`，检查网关状态。
 
-本系统在以下真机实验环境下完成全流程开发、调试与自动化闭环验证：
+升级前保留现有数据和构件。历史控制台 APK 使用过不同签名；普通设备可能无法直接覆盖，安装脚本会在 APK 安装失败时停止。本轮测试机具备核心签名破解，已实际覆盖并核验数据保留；该结果不能推定为普通设备的跨签名升级能力。
 
-| 维度 | 实测实验配置 |
-| :--- | :--- |
-| **设备型号** | 真实 Android 物理机 (ColorOS 16 / Android 15-16 深度定制系统) |
-| **系统内核** | Android Linux 6.12+ 内核分支 |
-| **Root 方案** | **KernelSU (KSU)** / APatch / Magisk 特权环境 |
-| **Hook 框架** | **LSPosed** (注入 `system_server`、`com.android.systemui` 进程) |
-| **物理主屏规格** | 1272 x 2800 @ 560 DPI (副屏由守护脚本自适应匹配该规格与打孔 Cutout) |
+## 使用
 
----
+在 DSHA 中说明使用模块副屏，例如：
 
-### 核心特性：Agent Mobile 控制中心与配置中心 (v0.8.0 全新实装)
+> 使用 mobile-use 的后台副屏打开系统设置，只读取界面并截图，不改设置。完成后退出屏幕控制并回收副屏。
 
-在 `v0.8.0-alpha` 中，项目全面引入了内置于特权 APK (`agent_hook.apk`) 的原生控制中心（`SettingsActivity`），采用深空暗黑极客风格（`#0F1117`）、**绝对零 Emoji**、单行极简条目与紧凑按钮设计：
+典型工具流程：
 
-#### 1. 固化吸顶统一 Header 与纯几何矢量底栏
-- **吸顶固定 Header**：跨页面绝对对齐，零跳动。集成当前看板子标题与 `[刷新]` 快捷按钮。
-- **纯几何矢量 Canvas 底栏**：`56dp` 沉浸式底栏，零图片、零文字、零表情符号，高精度 Canvas 动态绘制：
-  - **Tab 0 (仪表图标)**：基本信息与服务监控看板
-  - **Tab 1 (终端图标 `>_`)**：DSH 设置、凭据与 Web 控制台偏好
-  - **Tab 2 (双屏图标)**：虚拟副屏硬件参数与自动化环境
+```text
+mobile_start
+  → mobile_mode(background)
+  → mobile_action(launch_app)
+  → mobile_ui_dump / mobile_screenshot / mobile_action
+  → mobile_mode(idle)
+  → mobile_stop
+```
 
-#### 2. 三大板块功能矩阵
+`foreground` 操作物理主屏，`background` 操作模块副屏；切换后重新读屏再决定操作坐标。没有应用时先用 `launch_app` 启动目标应用。
 
-##### 【Tab 0】基本信息 / 监控 (Status & System Preferences)
-- **服务与网络监控看板**：
-  - `DSH 控制台`：实时检测 `127.0.0.1:3080` 连通性，回显 `[ONLINE] (3080)`；
-  - `DSH 版本`：**不读任何本地文件路径**，通过本地签名 Cookie 向 3080 发起原生 Remote RPC（`POST /api/pluginManager/listBundles`）动态嗅探，回显核心版本（如 `v0.2.0-rc.2`），无论 DSH 部署在 Chroot、PRoot、Termux 还是 Docker 宿主网络均 100% 通用；
-  - `网关服务`：实时探测 `127.0.0.1:3070`，回显 PID；
-  - `运行模式`：`IDLE (待机)` / `BACKGROUND` / `FOREGROUND`；
-  - `LSPosed 模块`：`[ACTIVE]` / `[INACTIVE]`（双保险探针：Self-Hook + Daemon 深度校验）。
-- **系统特性偏好**：
-  - `通知流体云化`：开启时将运行状态提升为 ColorOS 状态栏打孔胶囊；关闭时**显式销毁打孔区旧胶囊**，Hook 层执行硬拒绝，纯净退回下拉通知栏；
-  - `任务完成提醒`：一键切换自动化跑完后的声音与振动强提醒；
-  - `桌面图标快捷方式`：默认开启**纯隐形模式**（桌面上零图标）；打开后动态注册 `LauncherAlias` 快捷入口。
-- **快捷唤起**：`[打开控制台]` 按钮即时拉起 Web 悬浮窗。
+可回答的问题使用 DSHA 的 `ask_user_question`。插件自动显示等待状态，答案由 DSHA 处理；`mobile_question` 仅投递问题通知。
 
-##### 【Tab 1】DSH 设置 / 凭据 (DSH Core & Console Customization)
-- **网关节点**：回显 3070 与 3080 本地端点；
-- **通信凭据密钥**：提供掩码输入框、`[显示/隐藏]` 切换与 `[保存并同步]` 按钮，自动持久化并下发至 3070 网关；
-- **控制台偏好**：
-  - `毛玻璃透明主题`：开启时 WebView 全透视且注入半透明磨砂毛玻璃 (`backdrop-filter: blur(28px)`) 与呼吸光；关闭时 WebView 填充 DSH 官方纯黑实色（`#151517`），彻底遮蔽底层画面；
-  - `悬浮控制球与快捷条`：控制是否注入底部小鲸鱼浮动开关、主页按键与返回对话条；
-  - `输入法自适应滚动`：输入法弹起时自动上推避让输入框。
+| 任务状态 | 超级岛表现 |
+| --- | --- |
+| 任务进行中 | 青绿色终端 |
+| 前台控制 | 蓝色眼睛 |
+| 后台副屏 | 紫色双窗口、外圈光效 |
+| 等待回答 | 琥珀色问号 |
+| 任务完成 | 绿色勾 |
+| 执行失败 | 红色叉 |
+| 任务已停止 | 灰色停止图标 |
 
-##### 【Tab 2】副屏设置 / 环境 (Virtual Display & Automation)
-- **副屏硬件参数**：实时显示 Display ID、副屏分辨率（如 `1272 x 2800`）、像素密度（`560 DPI`）；
-- **自动化环境**：
-  - `副屏自动化静音`：通过 AppOps 底层精准抑制副屏音频流，杜绝后台刷视频突发爆音；
-  - `前台接管呼吸光`：前台物理屏幕被 AI 接管操作时的边缘视觉呼吸警示；
-  - `完成后自动待机`：任务跑完且无提问时副屏自动退回 Idle 节能待机；
-- **模式手动切换**：`[待机]` / `[后台副屏]` / `[前台接管]` 一键切换。
+结束屏幕控制后，DSHA 可以继续处理任务；整轮任务结束后才产生最终结果通知。停止请求不能撤销已经执行的设备或外部操作。
 
-#### 3. 系统级多维入口
-- **LSPosed 管理器直达**：遵循 `de.robv.android.xposed.category.MODULE_SETTINGS` 契约，在 LSPosed 模块卡片点击齿轮一键直达控制中心；
-- **下拉通知栏快捷磁贴**：注册 Android 原生 Quick Settings Tile（`ConsoleTileService`），非实体侧键机型亦可下拉状态栏一键呼出控制台；
-- **桌面快捷小鲸鱼**：支持动态开启/隐藏。
+## 本轮验收
 
----
+- 正式 DSHA 模型任务完成模块副屏创建、应用启动、截图读屏、前后台切换和回收。
+- 真实提问、手机提交答案、完成通知，以及通知停止按钮中断 DSHA 均已验证。
+- 七种状态已检查系统通知载荷；前台、后台和等待状态已目视核对。展开态外圈效果另见上方手机截图。
+- 重启后自动启动、私有 token 交付、通知权限、个性化设置和 LSPosed 作用域保留通过；再次真实调用 `mobile_status` 成功。
+- 19 项 Go 顶层测试、7 项 Node 测试、Java 82 项载荷检查及七状态检查通过。
 
-### 核心架构与职责分工
+[完整协议与验收边界](docs/live-agent-0.10.md) · [HyperOS 适配说明](docs/hyperos.md) · [插件工具清单](dsha-plugin/README.md)
 
-1. **命令行控制总线 (`/system/bin/vd`)**：
-   - 守护进程生命周期控制与即时状态诊断；
-   - 物理输入事件与底层 Java 观测工具的 CLI 快捷直通封装。
-2. **底层运行时与守护进程 (`vd-tool-java`)**：
-   - `DaemonMain` (`agent_vd.dex`)：通过特权 API 动态创建 `VirtualDisplay`，镜像主屏物理打孔（Cutout），管理全分辨率的高性能 JPEG 帧缓存。
-   - `ToolMain` (`agent_tools.dex`)：利用 `UiAutomation` 抓取结构化平铺 UI 控件树；提供基于无障碍的纯确定性双轨文字注入。
-3. **HTTP / REST 控制网关 (`vd-server-go`)**：
-   - 纯静态编译的 ARM64 Go 服务，运行在 `0.0.0.0:3070`；
-   - 对外暴露标准的 RESTful API，统一调度物理/虚拟屏幕切换、手势与无障碍操作、通知与交互确认。
-4. **设备端交互与特权宿主应用 (`agent-hook-apk`)**：
-   - `SettingsActivity`：**原生控制中心与配置中心**（三栏纯图标底栏、服务看板、偏好开关）；
-   - `HookEntry`：基于 LSPosed 的 `system_server` 特权补丁，解锁虚拟副屏多任务承载能力、主屏输入法隔离（IMMS），以及 SystemUI 流体云过滤与硬拦截；
-   - `ConsoleTileService`：Android Quick Settings 下拉控制中心快捷磁贴；
-   - `GlowService`：前台全屏赛博呼吸光效、实时触控涟漪与激光轨迹，以及状态栏打孔胶囊生命周期管理；
-   - `DemoDialogActivity`：全屏嵌入式 Web 控制台浮窗，支持透明毛玻璃与官方纯黑双模自适应；
-   - `QuestionActivity` & `NotifyReceiver`：交互提问直达浮窗与任务完成通知。
+## 开发
 
----
+```sh
+node --test dsha-plugin/test/gateway.test.cjs dsha-plugin/test/lifecycle.test.mjs
+(cd vd-server-go && go test ./...)
+```
 
-### 暴露的工具与接口
+Android 构件使用 JDK 17、Android SDK 和 Go 构建。Windows 构建入口为 `tools/build-windows.py`；Linux 使用 `agent-hook-apk/build-ci.sh` 与 `tools/build-runtime-ci.sh`。持续集成检查源码、测试及未签名编译；Release 使用单独保存的固定签名密钥。未签名 CI APK 仅供编译检查。
 
-#### 1. 命令行控制总线 (`vd` 工具)
+控制网关默认监听 `127.0.0.1:3070`，敏感接口使用应用私有 token；插件不需要读取模型 API key。签名私钥、设备 token、日志和备份均不随源码发布。
 
-模块安装后会自动在系统 PATH 中注册 `vd` 命令（位于 `/system/bin/vd`）：
+## English
 
-- **`vd start`**：唤醒底层虚拟副屏，自适应计算物理主屏分辨率与 DPI，启动 3070 端口监控网关。
-- **`vd stop`**：完全销毁副屏，向系统注销 Display，回收所有显存与计算资源。
-- **`vd status`**：查看当前副屏状态（运行中/休眠）、当前 Display ID 以及动态屏幕规格。
-- **`vd launch <包名> [--user <id>]`**：定向调度指定应用直接在副屏启动（支持应用双开分身 `--user 999`）。
-- **`vd tree`**：结构化 Dump 当前副屏的无障碍控件树（平铺格式：状态行 + 列头 + 一行一元素，含节点文本、flags、边界与可点击中心坐标）。
-- **`vd tap <x> <y>`**：向当前目标屏幕发送物理触控点击事件。
-- **`vd type [target] "<文本>"`**：静默文字注入（双轨确定性：可指定 UI 树数字节点 ID 如 `146`，或省略 target 直接灌入当前聚焦输入框；0 键盘弹窗）。
-- **`vd swipe <x1> <y1> <x2> <y2> [duration_ms]`**：向目标屏幕发送滑动、曲线笔触或长按手势。
-- **`vd key <keycode>`**：向目标屏幕发送系统物理按键（如 4 为返回，3 为主页，66 为回车）。
-- **`vd screenshot [path]`**：定向截取当前屏幕画面并保存为 JPEG 图片。
-- **`vd apps [query]`**：获取本机已安装的应用名称与启动 Activity 组件名。
+Agent Mobile Use provides a root-backed background virtual display for **DSHA users with rooted Android phones**, with Xiaomi HyperOS Super Island task notifications. The DSHA plugin exposes fifteen tools and follows real host lifecycle events for running, foreground, background, waiting, completed, failed and cancelled states.
 
-#### 2. HTTP / REST 监控网关 (Port 3070)
+Install the KernelSU module and the matching DSHA plugin from the release. This module's display backend does not require DSHA's separate built-in virtual-display permission. The current device-tested setup is Redmi K90, HyperOS 4 / Android 17, KernelSU, LSPosed and DSHA build170. Other ROMs require separate validation. Historical APK signatures may prevent a normal overwrite upgrade; back up first.
 
-由纯静态 Go 服务 `vd_server` 提供：
-- `GET http://127.0.0.1:3070/`：可视化 Web 监控界面，提供低延迟 H.264 硬件编码实时视频流、副屏状态指示与前后台切换开关。
-- `GET /api/stream/ws`：WebSocket H.264 低延迟裸流通道，直连 `DaemonMain` 硬件编码器（1080P / 60FPS / 6Mbps）。
-- `GET /api/status`：获取当前显示器 JSON 状态（含运行状态、物理/副屏宽高、DPI、当前操作模式、目标 Display ID、LSPosed 挂载状态）。
-- `GET /api/screenshot`：获取当前目标屏幕画面。副屏运行时默认直接提取硬件帧缓存并压缩为 JPEG；主屏模式自动调用硬件抓屏。
-- `POST /api/action`：**统一复合动作执行引擎**。聚合了 `observe`、`click`、`swipe`、`type`、`key`、`launch_app`、`wait` 等全部物理动作，并在动作后自动进行自适应物理过渡与回弹 UI dump 观测。
-- `GET|POST /api/start` · `POST /api/stop`：远程拉起/注销底层虚拟副屏。
-- `GET|POST /api/mode`：前后台操作模式查询与切换（`foreground`、`background`、`idle`）。
-- `GET /api/dump_ui`：平铺式无障碍树观测接口，支持 `?no_system_ui=1`。
-- `GET|POST /api/apps`：查询本机桌面应用列表（自动归一化解析 `--user` 分身应用）。
-- `POST /api/notify`：投递系统横幅通知与任务完成状态。
-- `POST /api/question` · `POST /api/question/cancel`：交互提问通知投递与取消。
-- `POST /api/auth/secret`：DSH 通信密钥动态同步与查询。
-- `GET /api/audio/status` · `POST /api/audio/toggle` · `POST /api/audio/unmute-all`：副屏应用智能静音状态查询、手动开关与全量解静音。
-- `GET /api/session/watch` · `POST /api/task_event`：DSH 活跃会话内核级连接心跳与状态同步。
+## 来源与许可
 
----
-
-### 安装与使用方式
-
-#### 方式一：直接刷入发行版（推荐）
-
-1. 从 `release/` 目录或 GitHub Releases 下载最新的刷机包：
-   **`agent-mobile-use-ksu-v0.9.0-alpha.zip`**
-2. 将 zip 文件传输至手机中。
-3. 打开 **KernelSU** (或 APatch / Magisk) 管理器 -> 点击「模块」-> 选择该 zip 进行安装。
-4. 安装过程中脚本会自动完成以下动作：
-   - 安装静默控制底座 APK (`agent_hook.apk`)；
-   - 自动检测本地 LSPosed 数据库并激活 `system`、`android`、`com.android.systemui` 作用域，HyperOS/MIUI 上额外激活 `com.xiaomi.xmsf`；
-   - 将 `vd` 部署至 `/system/bin/vd`。
-5. 重启手机使 LSPosed Hook 与系统服务挂载生效。
-
-#### 方式二：手动编译源码
-
-- 编译 Java 组件：进入 `vd-tool-java/` 目录，执行 `./build.sh`。
-- 编译 Go 服务：进入 `vd-server-go/` 目录，执行 `./build.sh`（静态交叉编译）。
-- 编译 Hook APK：进入 `agent-hook-apk/` 目录，执行 `./build.sh`。
-- 组装并打包：在 `ksu-module/` 执行 `./pack.sh` 生成模块 zip。
-
-### HyperOS / MIUI 超级岛适配（v0.9.0-alpha，默认关闭）
-
-HyperOS 的「超级岛」由焦点通知（`miui.focus.param` extras）驱动，其白名单由 SystemUI 权限闸门与 XMSF 签名校验双层控制；第三方应用无官方自助开通入口（只提供 `canShowFocus` 查询，开通需邮件申请 `mipush-permission@xiaomi.com`）。本模块用 LSPosed 在系统侧解锁这两层校验，并在通知里附加岛 JSON：
-
-- `HyperIsland.java`：ROM/能力探测（`ro.mi.os.version.name`、`persist.sys.feature.island`、`canShowFocus`、`notification_focus_protocol`）+ 三类通知（胶囊 / 完成 / 提问）的岛数据挂载；
-- `IslandPayloadBuilder.java`：纯 JSON 构造（≤3072 字节），不依赖 Android 类，可在 JVM 上单测；
-- `HookEntry.java`：HyperOS 分支 hook `NotificationSettingsManager#canShowFocus/canCustomFocus`、`focus.SignatureChecker#checkSignatures` 返回 true，`FocusNotificationPluginImpl#onNotificationPosted` 放行本应用，插件 ClassLoader 二次挂钩；XMSF 进程 hook `com.xiaomi.xms.auth.AuthSession#b`；
-- `run_daemon.sh`：`BOOTCLASSPATH` 改为 `/proc/1/environ` → `init.environ.rc` → 存在性过滤列表三级发现，不再硬编码 ColorOS/QCOM 路径。
-
-详见 [docs/hyperos.md](docs/hyperos.md)（原理、开启方式、真机验证命令、故障恢复）。该功能**默认关闭**，入口：设置页「系统特性偏好 → 超级岛通知（HyperOS）」；关闭时行为与 v0.8.7-alpha 普通通知一致。
-
-> 真机状态（2026-10-19，REDMI K90 / `2510DRK44C`，HyperOS OS4.0 V816 / Android 17）：胶囊、完成、提问三类通知均已上岛并通过重启复验；胶囊为纯图标紧凑样式；后台接管 + 虚拟屏运行时附加官方彩虹外圈光效（`outEffectSrc="outer_glow"`，仅后台模式）；虚拟屏创建 / 任务迁移 / `launch_app` / 截屏 / UI dump 均可用。system_server 侧 `wm`/`IME` 那批 hook 在 HyperOS 4 上仍报 `ClassNotFoundException`（未挂载，但不阻塞上述能力），详见 docs/hyperos.md 第 7、9、10 节。
-
----
-
-<a name="english"></a>
-## English Description
-
-`agent-mobile-use` is the Mobile Use tool for **DeepSeek Harness (DSH)**. It gives an agent the ability to operate apps on an Android device, running them on a background virtual display so the physical screen stays untouched (tested on ColorOS 16 / Android 15-16).
-
-By decoupling execution onto an independent virtual display (Display > 0), intercepting task/activity focus switches with LSPosed hooks, and injecting text via accessibility without popping up soft keyboards, it lets the agent drive apps while you keep using the phone.
-
-> ⚠️ **Release Notice (v0.9.0-alpha)**:  
-> Current development release is **`v0.9.0-alpha`** (KSU module versionCode: `900`), adding **HyperOS / MIUI super island (focus notification) support** (disabled by default, see [docs/hyperos.md](docs/hyperos.md)), dynamic `BOOTCLASSPATH` discovery and the `com.xiaomi.xmsf` scope on top of v0.8.7-alpha. ColorOS fluid cloud, the native control center and the 3080 Remote RPC handshake are unchanged.
-
----
-
-### Key Features: Mobile Control & Settings Center (v0.8.0)
-
-Integrated directly into `agent_hook.apk`, the new native control center (`SettingsActivity`) delivers a minimalist cyberpunk industrial UI (`#0F1117`) with **strict zero-emoji typography** and compact controls:
-
-1. **Sticky Header & Vector Bottom Navigation Bar**:
-   - **Sticky Fixed Header**: Seamlessly aligned across all three tabs, displaying the live view title and a compact `[Refresh]` button.
-   - **Pure Vector Bottom Bar (56dp)**: Crisp Canvas-drawn vector icons (Gauge, Terminal `>_`, Dual Monitors) with micro glowing indicator dots — zero images, zero emojis.
-2. **Feature Matrix Across 3 Tabs**:
-   - **Tab 0 (Dashboard & Status)**:
-     - Real-time 3080 Web Console connection check;
-     - Dynamic DSH runtime version probe (via 3080 Remote RPC `POST /api/pluginManager/listBundles`, fully decoupled from local paths or Chroot/PRoot/Termux environments);
-     - Port 3070 daemon status and PID;
-     - Current execution mode (`IDLE`, `BACKGROUND`, `FOREGROUND`);
-     - LSPosed hook active indicator (`[ACTIVE]` / `[INACTIVE]`);
-     - System preference switches: Fluid Cloud conversion (with punch-hole capsule teardown), task completion alerts (sound & vibration), and launcher icon toggle (pure invisible mode by default).
-   - **Tab 1 (DSH Core & Console)**:
-     - Gateway and console endpoints;
-     - Dynamic authentication secret management with show/hide mask and gateway synchronization;
-     - Web console preferences: Translucent blur theme toggle (glassmorphism overlay vs. native DSH solid black `#151517`), floating whale toolbar toggle, and soft-keyboard scroll assist.
-   - **Tab 2 (Virtual Display & Automation)**:
-     - Virtual display hardware parameters (Display ID, resolution, DPI);
-     - Automation environment switches: Virtual display audio mute guard, foreground takeover glow frame, and auto standby on finish;
-     - Manual mode switcher (`[Idle]`, `[Background]`, `[Foreground]`).
-3. **Multi-Entry Integration**:
-   - **LSPosed Module Settings**: Click the module card gear icon in LSPosed Manager to open the control center directly (`de.robv.android.xposed.category.MODULE_SETTINGS`);
-   - **Quick Settings Tile**: `ConsoleTileService` allows pulling down the Android status bar to trigger the Web console on any device;
-   - **Launcher Shortcut**: Optional toggleable launcher icon.
-
----
-
-### Exposed Tools & Interfaces
-
-1. **CLI Bus (`/system/bin/vd`)**:
-   - `vd start` / `vd stop` / `vd status`: Virtual display lifecycle and metrics.
-   - `vd launch <pkg> [--user <id>]`: Launch application directly onto target display.
-   - `vd tree`: Flat structured dump of accessibility hierarchy.
-   - `vd tap <x> <y>`: Inject touch events to target display.
-   - `vd type [target] "<text>"`: Deterministic dual-track silent text injection without keyboard popups.
-   - `vd swipe <x1> <y1> <x2> <y2> [duration]`: Simulate gestures or brush strokes.
-   - `vd key <keycode>`: Send key events.
-   - `vd screenshot [path]`: Capture JPEG frame of current target display.
-   - `vd apps [query]`: List launchable applications.
-
-2. **HTTP / REST Gateway (Port 3070)**:
-   - `GET /`: Visual web console with live H.264 video streaming.
-   - `GET /api/stream/ws`: WebSocket low-latency raw H.264 bitstream.
-   - `GET /api/status`: JSON display status (includes LSPosed active state).
-   - `GET /api/screenshot`: Current frame of target display.
-   - `POST /api/action`: Unified composite action engine.
-   - `GET|POST /api/mode`: Query or switch between `foreground`, `background`, and `idle`.
-   - `POST /api/auth/secret`: Dynamic DSH auth secret synchronization.
-   - `GET /api/audio/status` · `POST /api/audio/toggle`: Event-driven background audio mute guard.
-
----
-
-## License
-
-MIT License.
+基于 [AcidGr/agent-mobile-use](https://github.com/AcidGr/agent-mobile-use) 继续开发。HyperOS 协议参考 [小米开发指南](https://dev.mi.com/xiaomihyperos/documentation/detail?pId=2131) 和 MIT 项目 [HyperIsland](https://github.com/1812z/HyperIsland)。保留原作者酸小明（AcidGr）的版权声明，源码采用 [MIT License](LICENSE)。

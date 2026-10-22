@@ -206,12 +206,11 @@ public final class IslandPayloadSelftest {
         }
         for (int i = 0; i < array.length(); i++) {
             JSONObject item = array.getJSONObject(i);
-            check("action[" + i + "] actionIntent prefix", item.optString("actionIntent")
+            check("action[" + i + "] action reference prefix", item.optString("action")
                     .startsWith(IslandPayloadBuilder.ACTION_KEY_PREFIX));
             check("action[" + i + "] title", !item.optString("actionTitle").isEmpty());
             check("action[" + i + "] type title-only", item.optInt("type") == 2);
-            check("action[" + i + "] intentType broadcast",
-                    item.optInt("actionIntentType") == IslandPayloadBuilder.INTENT_BROADCAST);
+            check("action[" + i + "] resource is not an Intent URI", !item.has("actionIntent"));
         }
         check("action constants", IslandPayloadBuilder.INTENT_ACTIVITY == 1
                 && IslandPayloadBuilder.INTENT_BROADCAST == 2

@@ -1,6 +1,12 @@
 #!/system/bin/sh
 # Agent Mobile Use - Lightweight CLI gateway wrapper
 BASE_URL="http://127.0.0.1:3070"
+CURL_BIN=$(command -v curl)
+curl() {
+    token=$(cat "${MOBILE_USE_TOKEN_FILE:-/data/adb/agent_mobile_use/gateway-token}" 2>/dev/null)
+    if [ -n "$token" ]; then "$CURL_BIN" -H "Authorization: Bearer $token" "$@"
+    else "$CURL_BIN" "$@"; fi
+}
 
 # Minimal JSON string escaper: backslash, double-quote, newline, CR, tab.
 # Historical note: an earlier version interpolated raw "$2/$3" into the curl

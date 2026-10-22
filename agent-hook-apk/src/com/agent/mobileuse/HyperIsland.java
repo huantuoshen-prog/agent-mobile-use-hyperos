@@ -198,6 +198,14 @@ public final class HyperIsland {
 
     // ------------------------------------------------------------- attachments
 
+    /** 标准通知与岛模板共用同一组 PendingIntent；关闭上岛后仍可停止任务。 */
+    static void addLiveActions(Context context, Notification.Builder builder, Icon icon) {
+        if (builder == null) return;
+        android.content.SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        builder.addAction(buildBroadcastAction(context, icon, "停止", ACTION_STOP, 0));
+        builder.addAction(buildActivityAction(context, "查看", prefs.getString("session_id", "")));
+    }
+
     /** Attach the running / foreground / background capsule island. */
     public static void attachCapsule(Context context, Notification.Builder builder,
                                      String stateTitle, String sessionTitle, String hint,
@@ -217,20 +225,20 @@ public final class HyperIsland {
             return;
         }
         try {
+            String state = AgentState.fromMode(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("mode", "RUNNING"));
             IslandPayloadBuilder.ActionRef[] actions = new IslandPayloadBuilder.ActionRef[]{
                     new IslandPayloadBuilder.ActionRef(IslandPayloadBuilder.PIC_ACTION_STOP,
                             "停止", IslandPayloadBuilder.INTENT_BROADCAST),
-                    new IslandPayloadBuilder.ActionRef(IslandPayloadBuilder.PIC_ACTION_SWITCH,
-                            "切后台", IslandPayloadBuilder.INTENT_BROADCAST),
             };
+            // 基础焦点卡实际只呈现一个主按钮；整张通知和标准操作均可进入会话。
             // Official outer-glow sentinel: SystemUI draws its own LightBg
             // shader ring for "outer_glow"; an image key here is ignored.
             String glowSrc = virtualDisplayRunning ? "outer_glow" : null;
             // Empty colour lets SystemUI use its default multi-colour ramp.
             String glowColor = null;
-            String json = IslandPayloadBuilder.capsule(protocolVersion(context), stateTitle,
-                    sessionTitle, hint, IslandPayloadBuilder.PIC_CAPSULE, true,
-                    glowColor, glowSrc, actions);
+            android.content.SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String json = IslandPayloadBuilder.live(protocolVersion(context), state, sessionTitle, hint,
+                    prefs.getInt("live_total", 0), prefs.getInt("live_completed", 0), actions);
             if (json == null) {
                 return;
             }
@@ -250,13 +258,11 @@ public final class HyperIsland {
                 actionBundle.putParcelable(IslandPayloadBuilder.ACTION_KEY_PREFIX
                                 + IslandPayloadBuilder.PIC_ACTION_STOP,
                         buildBroadcastAction(context, iconObject, "停止", ACTION_STOP, 0));
-                actionBundle.putParcelable(IslandPayloadBuilder.ACTION_KEY_PREFIX
-                                + IslandPayloadBuilder.PIC_ACTION_SWITCH,
-                        buildBroadcastAction(context, iconObject, "切后台",
-                                ACTION_SWITCH_BACKGROUND, 0));
+                actionBundle.putParcelable(IslandPayloadBuilder.ACTION_KEY_PREFIX + IslandPayloadBuilder.PIC_ACTION_OPEN,
+                        buildActivityAction(context, "查看", prefs.getString("session_id", "")));
             }
             if (!actionBundle.isEmpty()) {
-                extras.putBundle(EXTRA_ACTIONS, actionBundle);
+                attachActions(extras, actionBundle);
             }
             builder.addExtras(extras);
             android.util.Log.i(TAG, "Super island capsule attached (" + json.length()
@@ -270,6 +276,11 @@ public final class HyperIsland {
     public static void attachCompleted(Context context, Notification.Builder builder,
                                        String title, String content, Bitmap icon,
                                        String sessionId) {
+        attachOutcome(context, builder, title, content, icon, sessionId, "completed");
+    }
+
+    public static void attachOutcome(Context context, Notification.Builder builder, String title,
+                                     String content, Bitmap icon, String sessionId, String state) {
         if (!isIslandActive(context) || builder == null) {
             return;
         }
@@ -280,8 +291,7 @@ public final class HyperIsland {
                     new IslandPayloadBuilder.ActionRef(IslandPayloadBuilder.PIC_ACTION_CLEAR,
                             "清除", IslandPayloadBuilder.INTENT_BROADCAST),
             };
-            String json = IslandPayloadBuilder.completed(protocolVersion(context), title, content,
-                    IslandPayloadBuilder.PIC_CHECKMARK, actions);
+            String json = IslandPayloadBuilder.live(protocolVersion(context), state, title, content, 0, 0, actions);
             if (json == null) {
                 return;
             }
@@ -291,7 +301,7 @@ public final class HyperIsland {
             Bundle pics = new Bundle();
             if (iconObject != null) {
                 pics.putParcelable(IslandPayloadBuilder.PIC_KEY_PREFIX
-                        + IslandPayloadBuilder.PIC_CHECKMARK, iconObject);
+                        + IslandPayloadBuilder.PIC_CAPSULE, iconObject);
             }
             if (!pics.isEmpty()) {
                 extras.putBundle(EXTRA_PICS, pics);
@@ -303,7 +313,7 @@ public final class HyperIsland {
             actionBundle.putParcelable(IslandPayloadBuilder.ACTION_KEY_PREFIX
                             + IslandPayloadBuilder.PIC_ACTION_CLEAR,
                     buildBroadcastAction(context, null, "清除", ACTION_CLEAR, 0));
-            extras.putBundle(EXTRA_ACTIONS, actionBundle);
+            attachActions(extras, actionBundle);
             builder.addExtras(extras);
             android.util.Log.i(TAG, "Super island completed attached (" + json.length() + " chars)");
         } catch (Throwable t) {
@@ -348,7 +358,7 @@ public final class HyperIsland {
             actionBundle.putParcelable(IslandPayloadBuilder.ACTION_KEY_PREFIX
                             + IslandPayloadBuilder.PIC_ACTION_CLEAR,
                     buildBroadcastAction(context, null, "忽略", ACTION_IGNORE, 0));
-            extras.putBundle(EXTRA_ACTIONS, actionBundle);
+            attachActions(extras, actionBundle);
             builder.addExtras(extras);
             android.util.Log.i(TAG, "Super island question attached (" + json.length() + " chars)");
         } catch (Throwable t) {
@@ -361,8 +371,12 @@ public final class HyperIsland {
     private static Notification.Action buildBroadcastAction(Context context, Icon icon,
                                                             String title, String islandAction,
                                                             int requestCodeBase) {
-        Intent intent = new Intent(NotifyReceiver.ACTION_ISLAND);
-        intent.setPackage(context.getPackageName());
+        Intent intent = new Intent(context, NotifyReceiver.class);
+        intent.setAction(NotifyReceiver.ACTION_ISLAND);
+        android.content.SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        intent.putExtra("session_id", prefs.getString("session_id", ""));
+        intent.putExtra("turn_id", prefs.getString("turn_id", ""));
+        intent.setData(android.net.Uri.parse("agent-mobile-use://island/" + islandAction + "/" + android.net.Uri.encode(prefs.getString("turn_id", ""))));
         intent.putExtra(EXTRA_ISLAND_ACTION, islandAction);
         PendingIntent pi = PendingIntent.getBroadcast(context,
                 requestCodeBase + islandAction.hashCode(), intent, PENDING_FLAGS);
@@ -372,7 +386,9 @@ public final class HyperIsland {
 
     private static Notification.Action buildActivityAction(Context context, String title,
                                                            String sessionId) {
-        Intent intent = new Intent(context, DemoDialogActivity.class);
+        Intent intent = context.getPackageManager().getLaunchIntentForPackage("com.dsh.client");
+        if (intent == null) intent = new Intent(context, DemoDialogActivity.class);
+        intent.putExtra("open_web", true);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         intent.putExtra("skip_glow", true);
@@ -383,6 +399,16 @@ public final class HyperIsland {
                 21000 + (sessionId == null ? 0 : sessionId.hashCode()), intent, PENDING_FLAGS);
         Notification.Action.Builder b = new Notification.Action.Builder(null, title, pi);
         return b.build();
+    }
+
+    // HyperOS 3/4 resolves actionIntent references at the extras top level.
+    // Retain the nested bundle for older focus-notification implementations.
+    private static void attachActions(Bundle extras, Bundle actions) {
+        extras.putBundle(EXTRA_ACTIONS, actions);
+        for (String key : actions.keySet()) {
+            android.os.Parcelable action = actions.getParcelable(key);
+            if (action != null) extras.putParcelable(key, action);
+        }
     }
 
     // ------------------------------------------------------------- bitmaps

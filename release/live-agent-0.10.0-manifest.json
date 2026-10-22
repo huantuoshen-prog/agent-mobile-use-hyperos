@@ -1,0 +1,19 @@
+{
+  "module": {
+    "file": "agent-mobile-use-ksu-v0.10.0-alpha.zip",
+    "sha256": "7d9c99e53fad5f16b05866a526f3611732d0c5b5d583b90f217c61ffc8f937f1",
+    "bytes": 5461926
+  },
+  "plugin": {
+    "file": "dsh-mobile-use-0.3.0.zip",
+    "sha256": "4edbd83d2bf4f3627a9e78d2491f50682f04104b3c6db45b0eaa5633a4ae004c",
+    "bytes": 14992
+  },
+  "binaries": {
+    "apk/agent_hook.apk": "210ba82989137bc277f950de49fc75e786779f2d8fda5763a42a6fa52ed2a912",
+    "bin/vd_server": "5ad1780c23d506243a2563be76e72eaa67e38c14637608c326a9aec923837b49",
+    "bin/agent_tools.dex": "c44596a416e041efec2b411f26529d10dae8323745e2c6852b8968ae92259ade",
+    "bin/agent_vd.dex": "01ad2fb4cea859291372b50288e86f2f7994d5c3cefffee88948697d29a1b091",
+    "module_zip": "7d9c99e53fad5f16b05866a526f3611732d0c5b5d583b90f217c61ffc8f937f1"
+  }
+}

@@ -33,7 +33,13 @@ public class ConsoleTileService extends TileService {
         try {
             Intent intent = new Intent(this, DemoDialogActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            startActivityAndCollapse(intent);
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                android.app.PendingIntent pi = android.app.PendingIntent.getActivity(this, 2040, intent,
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT | 0x04000000);
+                TileService.class.getMethod("startActivityAndCollapse", android.app.PendingIntent.class).invoke(this, pi);
+            } else {
+                startActivityAndCollapse(intent);
+            }
         } catch (Throwable t) {
             Log.e(TAG, "Failed to launch DemoDialogActivity from Tile: " + t.getMessage(), t);
         }

@@ -24,6 +24,9 @@ public class NotifyReceiver extends BroadcastReceiver {
     public static final String ACTION_CLEAR = "com.agent.mobileuse.ACTION_CLEAR";
     public static final String ACTION_HANDOFF = "com.agent.mobileuse.ACTION_HANDOFF";
     public static final String ACTION_ISLAND = "com.agent.mobileuse.ACTION_ISLAND";
+    public static final String ACTION_LIVE_OUTCOME = "com.agent.mobileuse.ACTION_LIVE_OUTCOME";
+    public static final String ACTION_LIVE_QUESTION = "com.agent.mobileuse.ACTION_LIVE_QUESTION";
+    public static final String ACTION_QUESTION_CANCEL = "com.agent.mobileuse.ACTION_QUESTION_CANCEL";
 
     public static final String CHANNEL_ID = "dsh_agent_completed";
     public static final String CHANNEL_ID_SILENT = "dsh_agent_completed_silent";
@@ -33,6 +36,7 @@ public class NotifyReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        GatewayClient.initialize(context);
         if (intent == null) return;
         String action = intent.getAction();
         Log.i(TAG, "onReceive action: " + action);
@@ -48,6 +52,47 @@ public class NotifyReceiver extends BroadcastReceiver {
             tag = DEFAULT_TAG;
         }
         int id = intent.getIntExtra("id", DEFAULT_ID);
+
+        if (ACTION_LIVE_OUTCOME.equals(action)) {
+            String state = intent.getStringExtra("outcome");
+            if (!"completed".equals(state) && !"failed".equals(state) && !"cancelled".equals(state)) return;
+            android.content.SharedPreferences current = context.getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
+            String currentTurn = current.getString("turn_id", "");
+            if (!currentTurn.isEmpty() && current.getString("session_id", "").equals(intent.getStringExtra("session_id"))
+                    && !currentTurn.equals(intent.getStringExtra("turn_id"))) return;
+            postOutcomeNotification(context, nm, tag, id, intent.getStringExtra("title"), intent.getStringExtra("session_title"),
+                    intent.getStringExtra("content"), intent.getStringExtra("session_id"), state);
+            return;
+        }
+        if (ACTION_LIVE_QUESTION.equals(action)) {
+            String requestId = intent.getStringExtra("request_id");
+            context.getSharedPreferences("agent_question_state", Context.MODE_PRIVATE).edit().putString("request_id", requestId).apply();
+            android.content.SharedPreferences live = context.getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
+            if ("WAITING".equals(live.getString("mode", "")) && live.getString("session_id", "").equals(intent.getStringExtra("session_id"))) {
+                try {
+                    org.json.JSONArray questions = new org.json.JSONObject(intent.getStringExtra("data")).optJSONArray("questions");
+                    if (questions != null && questions.length() > 0) {
+                        String text = questions.getJSONObject(0).optString("question", "等待你的回答");
+                        live.edit().putString("live_detail", text).apply();
+                        Intent update = new Intent(context, GlowService.class).setAction("START_WAITING");
+                        update.putExtra("session_id", intent.getStringExtra("session_id"));
+                        update.putExtra("session_title", live.getString("session_title", "手机 Agent"));
+                        if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(update); else context.startService(update);
+                        return;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            QuestionActivity.showQuestionNotification(context, nm, requestId, intent.getStringExtra("session_id"), intent.getStringExtra("data"));
+            return;
+        }
+        if (ACTION_QUESTION_CANCEL.equals(action)) {
+            android.content.SharedPreferences prefs = context.getSharedPreferences("agent_question_state", Context.MODE_PRIVATE);
+            if (prefs.getString("request_id", "").equals(intent.getStringExtra("request_id"))) {
+                nm.cancel(QuestionActivity.NOTIFICATION_ID);
+                prefs.edit().remove("request_id").apply();
+            }
+            return;
+        }
 
         if (ACTION_CLEAR.equals(action)) {
             Log.i(TAG, "Canceling notification: tag=" + tag + ", id=" + id);
@@ -65,7 +110,8 @@ public class NotifyReceiver extends BroadcastReceiver {
             String islandAction = intent.getStringExtra(HyperIsland.EXTRA_ISLAND_ACTION);
             Log.i(TAG, "ACTION_ISLAND received: " + islandAction);
             if (HyperIsland.ACTION_STOP.equals(islandAction)) {
-                stopCapsule(context, nm);
+                if (intent.getStringExtra("turn_id") != null && !intent.getStringExtra("turn_id").isEmpty()) requestTaskStop(context, intent);
+                else stopCapsule(context, nm);
             } else if (HyperIsland.ACTION_SWITCH_BACKGROUND.equals(islandAction)) {
                 requestBackgroundMode();
             } else if (HyperIsland.ACTION_CLEAR.equals(islandAction)) {
@@ -113,6 +159,7 @@ public class NotifyReceiver extends BroadcastReceiver {
                 try {
                     java.net.URL url = new java.net.URL("http://127.0.0.1:3070/api/mode?mode=background");
                     java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
                     conn.setRequestMethod("GET");
                     conn.setConnectTimeout(1500);
                     conn.setReadTimeout(1500);
@@ -120,10 +167,8 @@ public class NotifyReceiver extends BroadcastReceiver {
                     Log.i(TAG, "Mode switch (background) finished, response code: " + code);
                     conn.disconnect();
                 } catch (Throwable t) {
-                    Log.w(TAG, "HTTP mode switch error, trying curl fallback: " + t.getMessage());
-                    try {
-                        Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", "curl -s 'http://127.0.0.1:3070/api/mode?mode=background'"}).waitFor();
-                    } catch (Throwable ignored) {}
+                    Log.w(TAG, "HTTP mode switch error, request failed: " + t.getMessage());
+
                 }
             }
         }).start();
@@ -143,8 +188,8 @@ public class NotifyReceiver extends BroadcastReceiver {
             android.content.SharedPreferences prefs =
                     context.getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
             // Keep the user's opt-in island preference; only the capsule state is reset.
-            boolean superIsland = prefs.getBoolean(HyperIsland.PREF_ENABLE, false);
-            prefs.edit().clear().putBoolean(HyperIsland.PREF_ENABLE, superIsland).apply();
+            prefs.edit().remove("mode").remove("session_id").remove("session_title").remove("last_completed_sid")
+                    .remove("turn_id").remove("live_detail").remove("live_total").remove("live_completed").remove("display_backend").apply();
         } catch (Throwable ignored) {}
         Log.i(TAG, "Capsule stopped from super island action");
     }
@@ -265,6 +310,11 @@ public class NotifyReceiver extends BroadcastReceiver {
     public static void postCompletedNotification(Context context, NotificationManager nm, String tag, int id,
                                                  String title, String sessionTitle, String content,
                                                  String sessionId) {
+        postOutcomeNotification(context, nm, tag, id, title, sessionTitle, content, sessionId, "completed");
+    }
+
+    public static void postOutcomeNotification(Context context, NotificationManager nm, String tag, int id,
+                                                 String title, String sessionTitle, String content, String sessionId, String state) {
         try {
             // Personalization settings
             android.content.SharedPreferences sp = context.getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
@@ -294,14 +344,14 @@ public class NotifyReceiver extends BroadcastReceiver {
             // Crisp pure title without emoji or count numbers
             String cleanTitle = cleanEmoji(title);
             if (cleanTitle.isEmpty()) {
-                cleanTitle = "已完成";
+                cleanTitle = AgentState.title(state);
             }
             builder.setContentTitle(cleanTitle);
 
             // Clean full content text for BigTextStyle
             String cleanContent = cleanEmoji(content);
             if (cleanContent.isEmpty()) {
-                cleanContent = "所有执行事项均已处理完毕";
+                cleanContent = AgentState.title(state);
             }
 
             // Card Header: Use genuine session title if provided
@@ -317,7 +367,7 @@ public class NotifyReceiver extends BroadcastReceiver {
             // Set SmallIcon and LargeIcon to transparent vector Cyber Checkmark
             Bitmap checkIcon = null;
             try {
-                checkIcon = createCyberCheckmarkBitmap(192);
+                checkIcon = AgentIcons.create(state, 192);
                 if (checkIcon != null && Build.VERSION.SDK_INT >= 23) {
                     Icon icon = Icon.createWithBitmap(checkIcon);
                     builder.setSmallIcon(icon);
@@ -336,7 +386,8 @@ public class NotifyReceiver extends BroadcastReceiver {
             }
 
             // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
-            HyperIsland.attachCompleted(context, builder, cardHeaderTitle, cleanContent, checkIcon, sessionId);
+            HyperIsland.attachOutcome(context, builder, cardHeaderTitle, cleanContent, checkIcon, sessionId, state);
+            builder.setColor(android.graphics.Color.parseColor(AgentState.color(state)));
 
             if (enableAlert) {
                 builder.setDefaults(Notification.DEFAULT_ALL);
@@ -351,7 +402,9 @@ public class NotifyReceiver extends BroadcastReceiver {
             }
 
             // Click Jump PendingIntent -> Launch DemoDialogActivity (Action Button Overlay / 灵动坞)
-            Intent overlayIntent = new Intent(context, DemoDialogActivity.class);
+            Intent overlayIntent = context.getPackageManager().getLaunchIntentForPackage("com.dsh.client");
+            if (overlayIntent == null) overlayIntent = new Intent(context, DemoDialogActivity.class);
+        overlayIntent.putExtra("open_web", true);
             // NO_ANIMATION is a best-effort hint; ColorOS still runs its capsule-expand remote
             // transition on notification taps and the flag does not reach WindowManager. The
             // real fix is skip_glow below, which stops the full-screen rim from being scaled
@@ -372,6 +425,7 @@ public class NotifyReceiver extends BroadcastReceiver {
             PendingIntent pi = PendingIntent.getActivity(context, requestCode, overlayIntent, flags);
             builder.setContentIntent(pi);
             builder.setAutoCancel(true); // Dismiss notification when clicked
+            builder.setTimeoutAfter(120000);
 
             builder.setPriority(2); // Notification.PRIORITY_MAX = 2
             builder.setShowWhen(true);
@@ -383,5 +437,22 @@ public class NotifyReceiver extends BroadcastReceiver {
         } catch (Throwable t) {
             Log.e(TAG, "postCompletedNotification failed: " + t.getMessage(), t);
         }
+    }
+    private void requestTaskStop(final Context context, final Intent intent) {
+        final PendingResult pending = goAsync();
+        new Thread(() -> {
+            try {
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL("http://127.0.0.1:3070/api/live/control").openConnection();
+                GatewayClient.authorize(null, conn);
+                GatewayClient.authorize(context, conn);
+                conn.setConnectTimeout(1500); conn.setReadTimeout(1500); conn.setRequestMethod("POST"); conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                org.json.JSONObject body = new org.json.JSONObject().put("action", "stop")
+                        .put("session_id", intent.getStringExtra("session_id")).put("turn_id", intent.getStringExtra("turn_id"));
+                try (java.io.OutputStream out = conn.getOutputStream()) { out.write(body.toString().getBytes("UTF-8")); }
+                conn.getResponseCode(); conn.disconnect();
+            } catch (Throwable t) { Log.w(TAG, "Task stop request unavailable"); }
+            finally { pending.finish(); }
+        }, "agent-stop-request").start();
     }
 }

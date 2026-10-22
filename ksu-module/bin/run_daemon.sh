@@ -69,7 +69,7 @@ bootclasspath_from_environ() {
 bootclasspath_from_rc() {
     for rc in /system/etc/init/hw/init.environ.rc /init.environ.rc; do
         if [ -r "$rc" ]; then
-            line=$(grep -m1 'BOOTCLASSPATH' "$rc" 2>/dev/null)
+            line=$(grep -m1 '^[[:space:]]*export[[:space:]]\{1,\}BOOTCLASSPATH[[:space:]]' "$rc" 2>/dev/null)
             if [ -n "$line" ]; then
                 echo "$line" | sed -e 's/.*BOOTCLASSPATH[[:space:]=]*//' -e "s/[\"']//g" -e 's/[[:space:]]*$//'
             fi

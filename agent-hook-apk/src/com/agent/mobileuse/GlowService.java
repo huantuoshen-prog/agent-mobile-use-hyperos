@@ -168,6 +168,9 @@ public class GlowService extends Service {
     }
 
     private void promoteToForeground(String mode, String sid, String sessionTitle) {
+        getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE).edit()
+                .putString("mode", mode).putString("session_id", sid == null ? "" : sid)
+                .putString("session_title", sessionTitle == null ? "" : sessionTitle).apply();
         try {
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
@@ -223,24 +226,37 @@ public class GlowService extends Service {
             Bitmap iconBitmap;
 
             if ("FOREGROUND".equals(mode)) {
-                capsuleTitle = "前台接管";
+                capsuleTitle = AgentState.title("foreground");
                 cardHeader = (displayTitle != null) ? displayTitle : "Agent 正在前台接管";
-                bigText = "点击切换为后台接管。";
+                bigText = "点击打开 DSHA 会话。";
                 iconBitmap = createSingleBlueEyeBitmap(192);
             } else if ("BACKGROUND".equals(mode)) {
-                capsuleTitle = "后台接管";
+                capsuleTitle = AgentState.title("background");
                 cardHeader = (displayTitle != null) ? displayTitle : "Agent 正在后台副屏运行";
                 bigText = "点击打开副屏监控。";
-                iconBitmap = createSingleBlueEyeBitmap(192);
+                iconBitmap = AgentIcons.create("background", 192);
+            } else if ("WAITING".equals(mode)) {
+                capsuleTitle = AgentState.title("waiting");
+                cardHeader = displayTitle != null ? displayTitle : "等待你的回答";
+                bigText = "打开 DSHA 回答后继续";
+                iconBitmap = AgentIcons.create("waiting", 192);
             } else {
                 // RUNNING
-                capsuleTitle = "运行中";
+                capsuleTitle = AgentState.title("running");
                 cardHeader = (displayTitle != null) ? displayTitle : "Agent 正在运行中";
                 bigText = "点击进入会话。";
-                iconBitmap = createCyberTerminalBitmap(192);
+                iconBitmap = AgentIcons.create("running", 192);
             }
 
+            android.content.SharedPreferences livePrefs = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
+            String liveDetail = livePrefs.getString("live_detail", "");
+            if (!liveDetail.isEmpty()) bigText = liveDetail;
+            int total = livePrefs.getInt("live_total", 0);
+            int completed = livePrefs.getInt("live_completed", 0);
             builder.setContentTitle(capsuleTitle);
+            builder.setContentText(bigText);
+            builder.setColor(Color.parseColor(AgentState.color(AgentState.fromMode(mode))));
+            if (total > 0) builder.setProgress(total, Math.min(completed, total), false);
 
             Icon capsuleIcon = null;
             if (Build.VERSION.SDK_INT >= 23 && iconBitmap != null) {
@@ -274,12 +290,13 @@ public class GlowService extends Service {
 
             if ("FOREGROUND".equals(mode)) {
                 // Foreground: Click pendingIntent -> Handoff to background
-                Intent handoffIntent = new Intent(NotifyReceiver.ACTION_HANDOFF);
-                handoffIntent.setPackage(getPackageName());
-                PendingIntent pi = PendingIntent.getBroadcast(this, 2028, handoffIntent, flags);
+                Intent handoffIntent = getPackageManager().getLaunchIntentForPackage("com.dsh.client");
+                if (handoffIntent == null) handoffIntent = new Intent(this, DemoDialogActivity.class);
+                handoffIntent.putExtra("open_web", true);
+                PendingIntent pi = PendingIntent.getActivity(this, 2028, handoffIntent, flags);
                 builder.setContentIntent(pi);
-            } else if ("BACKGROUND".equals(mode)) {
-                // Background: Click pendingIntent -> Open DemoDialogActivity loading http://127.0.0.1:3070/
+            } else if ("BACKGROUND".equals(mode) && !"dsha".equals(livePrefs.getString("display_backend", ""))) {
+                // root 副屏打开模块监控页；DSHA 副屏进入宿主会话。
                 Intent consoleIntent = new Intent(this, DemoDialogActivity.class);
                 // NO_ANIMATION is best-effort only; ColorOS runs its capsule-expand remote
                 // transition regardless. skip_glow is what actually avoids the stretched rim.
@@ -295,7 +312,9 @@ public class GlowService extends Service {
                 builder.setContentIntent(pi);
             } else {
                 // Running (idle session active, etc.): Click pendingIntent -> Open DemoDialogActivity (Web Console) targeting specific session!
-                Intent consoleIntent = new Intent(this, DemoDialogActivity.class);
+                Intent consoleIntent = getPackageManager().getLaunchIntentForPackage("com.dsh.client");
+                if (consoleIntent == null) consoleIntent = new Intent(this, DemoDialogActivity.class);
+                consoleIntent.putExtra("open_web", true);
                 // NO_ANIMATION: see the BACKGROUND branch above.
                 consoleIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_ANIMATION);
@@ -309,6 +328,9 @@ public class GlowService extends Service {
             }
 
             builder.setOngoing(true);
+            // HyperOS 会把 promoted ongoing 转成 liveupdate 模板，覆盖 miui.focus 的按钮与外圈。
+            try { builder.getClass().getMethod("setRequestPromotedOngoing", boolean.class).invoke(builder, !HyperIsland.isHyperOs()); }
+            catch (Throwable ignored) {}
             builder.setAutoCancel(false);
             builder.setOnlyAlertOnce(true);
             builder.setDefaults(0);
@@ -323,6 +345,7 @@ public class GlowService extends Service {
             builder.setStyle(bigStyle);
 
             // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
+            HyperIsland.addLiveActions(this, builder, capsuleIcon);
             boolean virtualDisplayRunning = "BACKGROUND".equals(mode);
             HyperIsland.attachCapsule(this, builder, capsuleTitle, displayTitle, bigText,
                     iconBitmap, virtualDisplayRunning);
@@ -347,6 +370,15 @@ public class GlowService extends Service {
         String action = (intent != null) ? intent.getAction() : null;
         String sid = (intent != null) ? intent.getStringExtra("session_id") : null;
         String title = (intent != null) ? intent.getStringExtra("session_title") : null;
+        if (intent != null) {
+            android.content.SharedPreferences.Editor edit = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE).edit();
+            if (intent.hasExtra("live_detail")) edit.putString("live_detail", intent.getStringExtra("live_detail"));
+            if (intent.hasExtra("turn_id")) edit.putString("turn_id", intent.getStringExtra("turn_id"));
+            if (intent.hasExtra("display_backend")) edit.putString("display_backend", intent.getStringExtra("display_backend"));
+            if (intent.hasExtra("total")) edit.putInt("live_total", intent.getIntExtra("total", 0));
+            if (intent.hasExtra("completed")) edit.putInt("live_completed", intent.getIntExtra("completed", 0));
+            edit.apply();
+        }
 
         // Auto-recover state if intent is null (e.g. killed by user clearing recent apps, restarted by START_STICKY)
         if (intent == null || action == null) {
@@ -386,6 +418,9 @@ public class GlowService extends Service {
         } else if ("START_RUNNING".equals(action)) {
             hideGlow();
             promoteToForeground("RUNNING", sid, title);
+        } else if ("START_WAITING".equals(action)) {
+            hideGlow();
+            promoteToForeground("WAITING", sid, title);
         } else if ("REFRESH".equals(action)) {
             try {
                 android.content.SharedPreferences sp = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
@@ -401,6 +436,7 @@ public class GlowService extends Service {
                     } catch (Throwable ignored) {}
                     promoteToForeground(savedMode, savedSid, savedTitle);
                 }
+                else { stopSelf(); return START_NOT_STICKY; }
             } catch (Throwable ignored) {}
         } else if ("SHOW_GLOW".equals(action)) {
             try {
@@ -480,6 +516,15 @@ public class GlowService extends Service {
             );
             lp.gravity = Gravity.TOP | Gravity.LEFT;
             lp.setTitle("AgentMobileEdgeGlow");
+            // Android 12+ 的穿透触摸要求 SAW 窗口不透明度不超过系统阈值。
+            lp.alpha = 0.79f;
+            if (Build.VERSION.SDK_INT >= 31) {
+                try {
+                    Object input = getSystemService("input");
+                    float maximum = ((Number) input.getClass().getMethod("getMaximumObscuringOpacityForTouch").invoke(input)).floatValue();
+                    lp.alpha = Math.min(lp.alpha, maximum);
+                } catch (Throwable ignored) {}
+            }
 
             // Allow overlay to extend into cutout / notch / status bar area (LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS = 3)
             try {
@@ -611,6 +656,7 @@ public class GlowService extends Service {
                 .remove("session_id")
                 .remove("session_title")
                 .remove("last_completed_sid")
+                .remove("turn_id").remove("live_detail").remove("live_total").remove("live_completed").remove("display_backend")
                 .apply();
     }
 

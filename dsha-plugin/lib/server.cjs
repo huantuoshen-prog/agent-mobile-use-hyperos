@@ -3,7 +3,7 @@
  * dsh-mobile-use MCP server（stdio, JSONL）。
  *
  * 只做一件事：把 agent-mobile-use 的本地网关 127.0.0.1:3070 包装成 MCP 工具。
- * 网关只监听回环、无鉴权；本进程不监听端口，也不读取任何凭据。
+ * 网关只监听回环，使用应用私有控制 token；本进程不监听端口。
  *
  * 工具语义与 DSHA 内置 android_* / android_vscreen_* 平行：
  *   - 这类工具操作的是 KernelSU 模块创建的“真虚拟屏”（DisplayManager VirtualDisplay）；
@@ -14,35 +14,47 @@
 const BASE = process.env.MOBILE_USE_BASE || 'http://127.0.0.1:3070';
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120000;
+const { request: gatewayRequest } = require('./gateway.cjs');
 
 const ACTIONS = ['observe', 'click', 'set_value', 'swipe', 'key', 'launch_app', 'wait'];
 
 const definitions = [
   ['mobile_status', '读取网关与虚拟屏状态（模式、display_id、尺寸、会话、LSPosed 是否生效）。', {}],
-  ['mobile_start', '创建/复用 root 虚拟屏并返回 display_id、尺寸、DPI。', {}],
+  ['mobile_start', '创建/复用 root 虚拟屏并返回 display_id、尺寸、DPI。', { width: { type: 'integer', minimum: 16 }, height: { type: 'integer', minimum: 16 }, dpi: { type: 'integer', minimum: 1 }, orientation: { type: 'string', enum: ['portrait', 'landscape'] } }],
   ['mobile_stop', '关闭虚拟屏并回收。', {}],
-  ['mobile_mode', '切换目标显示：foreground=用户主屏(display 0)，background=虚拟屏。切到 background 会把当前任务迁移到虚拟屏。', { mode: { type: 'string', enum: ['foreground', 'background'] } }],
+  ['mobile_mode', '切换目标显示：foreground=用户主屏(display 0)，background=虚拟屏，idle=解除屏幕控制。切到 background 会把当前任务迁移到虚拟屏。', { mode: { type: 'string', enum: ['foreground', 'background', 'idle'] } }],
   ['mobile_screenshot', '截取当前目标显示的最新一帧（JPEG）。虚拟屏模式需要先 start + mode=background。', {}],
   ['mobile_ui_dump', '读取当前目标显示的无障碍控件树（扁平化文本，含坐标）。操作前先读，操作后再次验证。', { no_system_ui: { type: 'boolean' }, raw: { type: 'boolean' } }],
   ['mobile_action', '执行一次动作。click 用 coordinate；swipe 用 coordinate+end_coordinate；set_value 用 text；key 用 key/文本键名；launch_app 用 package；wait 用 duration_ms。多数动作会顺带返回操作后的 UI 树。', { action: { type: 'string', enum: ACTIONS }, coordinate: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, end_coordinate: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, target: { type: 'string' }, duration_ms: { type: 'integer', minimum: 0 }, text: { type: 'string' }, key: { type: 'string' }, package: { type: 'string' }, activity: { type: 'string' }, no_system_ui: { type: 'boolean' } }],
   ['mobile_apps', '列出已安装应用（可给 query 过滤）。', { query: { type: 'string' } }],
   ['mobile_notify', '在手机上发任务通知；虚拟屏模式下会走 HyperOS 超级岛（需在控制台开启）。total/completed 用于进度与完成态。', { title: { type: 'string' }, session_title: { type: 'string' }, content: { type: 'string' }, session_id: { type: 'string' }, total: { type: 'integer', minimum: 0 }, completed: { type: 'integer', minimum: 0 }, is_completed: { type: 'boolean' } }],
-  ['mobile_question', '向用户发起交互提问；questions 为 [{header, question}] 数组。网关只把问题投到设备（前景弹卡片 / 后台发通知并上超级岛），回答不经本网关回传。', { request_id: { type: 'string' }, session_id: { type: 'string' }, questions: { type: 'array', items: { type: 'object' } } }],
+  ['mobile_question', '投递问题通知，不创建可回答的 DSH 请求。真正交互提问使用宿主 ask_user_question，插件会自动同步等待回答状态与问题通知。', { request_id: { type: 'string' }, session_id: { type: 'string' }, questions: { type: 'array', items: { type: 'object' } } }],
   ['mobile_question_cancel', '取消一条未回答的提问。', { request_id: { type: 'string' } }],
+  ['mobile_live_status', '读取手机 Agent 实况状态、任务进度与当前通知阶段。', {}],
+  ['mobile_resize', '调整 root 虚拟屏尺寸与 DPI；输入后重新读屏再使用坐标。', { width: { type: 'integer', minimum: 16 }, height: { type: 'integer', minimum: 16 }, dpi: { type: 'integer', minimum: 1 } }],
+  ['mobile_audio_status', '读取虚拟屏应用静音状态。', {}],
+  ['mobile_audio_toggle', '设置虚拟屏应用静音，退出时恢复本模块修改前的设置。', { enabled: { type: 'boolean' } }],
 ];
 
-const tools = definitions.map(([name, description, properties]) => ({
-  name,
-  description,
-  inputSchema: { type: 'object', properties, required: [], additionalProperties: false },
-}));
+// DSH 0.2 的工具 schema 子集不支持 minimum/minItems/maxItems；范围由 validate 强制执行。
+function schemaForDsh(properties) {
+  return JSON.parse(JSON.stringify(properties, (key, value) =>
+    ['minimum', 'minItems', 'maxItems'].includes(key) ? undefined : value));
+}
 
 const REQUIRED = {
   mobile_mode: ['mode'],
   mobile_action: ['action'],
   mobile_question: ['request_id', 'questions'],
   mobile_question_cancel: ['request_id'],
+  mobile_audio_toggle: ['enabled'],
 };
+
+const tools = definitions.map(([name, description, properties]) => ({
+  name,
+  description,
+  inputSchema: { type: 'object', properties: schemaForDsh(properties), required: REQUIRED[name] || [], additionalProperties: false },
+}));
 
 function bad(message) {
   const e = new Error(message);
@@ -71,22 +83,26 @@ function validate(name, args) {
     if (!Object.hasOwn(args, key)) continue;
     if (!Number.isInteger(args[key]) || args[key] < 0) throw bad('INVALID_' + key);
   }
+  for (const key of ['width', 'height', 'dpi']) {
+    if (Object.hasOwn(args, key) && (!Number.isInteger(args[key]) || args[key] < (key === 'dpi' ? 1 : 16) || args[key] > 16384)) throw bad('INVALID_' + key);
+  }
+  for (const [key, field] of Object.entries(fields)) {
+    if (!Object.hasOwn(args, key)) continue;
+    if (field.type === 'string' && typeof args[key] !== 'string') throw bad('INVALID_' + key);
+    if (field.type === 'boolean' && typeof args[key] !== 'boolean') throw bad('INVALID_' + key);
+    if (field.enum && !field.enum.includes(args[key])) throw bad('INVALID_' + key);
+  }
   if (args.mode !== undefined && fields.mode.enum && !fields.mode.enum.includes(args.mode)) throw bad('INVALID_mode');
   if (args.questions !== undefined && !Array.isArray(args.questions)) throw bad('INVALID_questions');
-  if (args.action === 'click' && !Object.hasOwn(args, 'coordinate')) throw bad('INVALID_coordinate');
+  if (args.action === 'click' && !Object.hasOwn(args, 'coordinate') && !args.target) throw bad('INVALID_coordinate');
   if (args.action === 'swipe' && (!Object.hasOwn(args, 'coordinate') || !Object.hasOwn(args, 'end_coordinate'))) throw bad('INVALID_coordinate');
   if (args.action === 'launch_app' && !args.package) throw bad('INVALID_package');
+  if (args.action === 'set_value' && !Object.hasOwn(args, 'text')) throw bad('INVALID_text');
+  if (args.action === 'key' && !args.key && !args.text) throw bad('INVALID_key');
 }
 
 async function request(url, options = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timer);
-  }
+  return gatewayRequest(url, { timeoutMs: DEFAULT_TIMEOUT_MS, ...options });
 }
 
 async function readJson(response) {
@@ -95,6 +111,7 @@ async function readJson(response) {
   try {
     value = JSON.parse(text);
   } catch {
+    if (!response.ok) throw bad(response.status === 401 ? 'GATEWAY_UNAUTHORIZED' : 'GATEWAY_HTTP_' + response.status);
     throw bad('INVALID_GATEWAY_RESPONSE');
   }
   const ok = response.ok && (value.success === undefined || value.success === true);
@@ -111,8 +128,8 @@ async function readJsonBody(response) {
   return readJson(response);
 }
 
-async function screenshot() {
-  const response = await request(BASE + '/api/screenshot');
+async function screenshot(options = {}) {
+  const response = await request(BASE + '/api/screenshot', options);
   if (!response.ok) {
     const text = (await response.text()).trim();
     return { content: [{ type: 'text', text: text || 'screenshot unavailable (status ' + response.status + '); call mobile_start + mobile_mode(background) first' }], isError: true };
@@ -131,13 +148,19 @@ async function screenshot() {
   };
 }
 
-async function call(name, args) {
+async function call(name, args, options = {}) {
   validate(name, args);
-  if (name === 'mobile_screenshot') return screenshot();
+  const request = (url, extra = {}) => gatewayRequest(url, { timeoutMs: DEFAULT_TIMEOUT_MS, ...extra, signal: options.signal });
+  if (options.signal?.aborted) throw options.signal.reason || bad('CANCELLED');
+  if (name === 'mobile_screenshot') return screenshot(options);
 
   if (name === 'mobile_status') return readJson(await request(BASE + '/api/status'));
-  if (name === 'mobile_start') return readJson(await request(BASE + '/api/start', { method: 'POST' }));
+  if (name === 'mobile_start') return readJson(await request(BASE + '/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) }));
   if (name === 'mobile_stop') return readJson(await request(BASE + '/api/stop', { method: 'POST' }));
+  if (name === 'mobile_live_status') return readJson(await request(BASE + '/api/live/status'));
+  if (name === 'mobile_audio_status') return readJson(await request(BASE + '/api/audio/status'));
+  if (name === 'mobile_resize') return readJson(await request(BASE + '/api/resize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) }));
+  if (name === 'mobile_audio_toggle') return readJson(await request(BASE + '/api/audio/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) }));
 
   if (name === 'mobile_mode') {
     const url = BASE + '/api/mode?mode=' + encodeURIComponent(args.mode);
@@ -149,7 +172,9 @@ async function call(name, args) {
     if (args.no_system_ui) params.set('no_system_ui', '1');
     if (args.raw) params.set('raw', '1');
     const url = BASE + '/api/dump_ui' + (params.size ? '?' + params : '');
-    return readJson(await request(url));
+    const response = await request(url);
+    if (args.raw) return { content: [{ type: 'text', text: await response.text() }], isError: !response.ok };
+    return readJson(response);
   }
 
   if (name === 'mobile_action') {
@@ -224,7 +249,8 @@ function startServer() {
       return;
     }
     if (id === undefined) return;
-    if (ended) {
+    const controller = active.get(id);
+    if (ended || controller?.signal.aborted) {
       send({ id, error: { code: -32800, message: 'Request cancelled before execution' } });
       return;
     }
@@ -234,7 +260,7 @@ function startServer() {
         result = {
           protocolVersion: params.protocolVersion || '2025-03-26',
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'dsh-mobile-use', version: '0.1.0' },
+          serverInfo: { name: 'dsh-mobile-use', version: '0.3.0' },
           instructions:
             '这些工具操作 agent-mobile-use 的 root 虚拟屏网关（127.0.0.1:3070）。顺序：mobile_start → mobile_mode(background) → mobile_ui_dump/mobile_screenshot → mobile_action。虚拟屏需要 KernelSU 模块；超级岛需要控制台开关。每次动作后重新读屏验证，别凭记忆连点。',
         };
@@ -243,14 +269,18 @@ function startServer() {
       } else if (method === 'tools/list') {
         result = { tools };
       } else if (method === 'tools/call') {
-        result = await call(params.name, params.arguments || {});
+        result = await call(params.name, params.arguments || {}, { signal: controller?.signal });
       } else {
         send({ id, error: { code: -32601, message: 'Method not found' } });
         return;
       }
       send({ id, result });
     } catch (error) {
-      const detail = error && error.name === 'AbortError'
+      if (controller?.signal.aborted) {
+        send({ id, error: { code: -32800, message: 'Request cancelled; submitted device actions may already have run' } });
+        return;
+      }
+      const detail = error && (error.name === 'AbortError' || error.name === 'TimeoutError')
         ? 'GATEWAY_TIMEOUT'
         : (error && /^[A-Z][A-Za-z0-9_]{0,60}$/.test(error.message || '') ? error.message : 'GATEWAY_UNAVAILABLE');
       send({
@@ -260,6 +290,8 @@ function startServer() {
           isError: true,
         },
       });
+    } finally {
+      active.delete(id);
     }
   }
 
@@ -285,6 +317,7 @@ function startServer() {
       if (value.method === 'notifications/cancelled') void receive(value);
       else if (pending >= 32) send({ id: value.id ?? null, error: { code: -32000, message: 'Request queue full' } });
       else {
+        if (value.id !== undefined) active.set(value.id, new AbortController());
         pending++;
         queue = queue.then(() => receive(value)).finally(() => pending--);
       }

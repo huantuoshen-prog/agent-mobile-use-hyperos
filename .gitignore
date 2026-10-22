@@ -6,3 +6,7 @@
 # top-level directory, so vd-tool-java/bin/classes/*.class stayed tracked.
 **/bin/classes/
 **/probe-java/classes/
+.build-windows/
+*.keystore
+*.jks
+*.p12

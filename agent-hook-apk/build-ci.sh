@@ -66,14 +66,16 @@ echo "[build-ci] zipalign"
 "$BT/zipalign" -p -f 4 "$BUILD/apk/unaligned.apk" "$BUILD/apk/aligned.apk"
 
 echo "[build-ci] keystore + sign"
-KEYSTORE="${KEYSTORE:-$BUILD/debug.keystore}"
-if [ ! -f "$KEYSTORE" ]; then
-    keytool -genkeypair -keystore "$KEYSTORE" -storepass android -keypass android \
-        -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-        -dname "CN=Android Debug,O=Android,C=US"
-fi
 mkdir -p "$SCRIPT_DIR/build"
-"$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \
+if [ "${BUILD_UNSIGNED:-0}" = 1 ]; then
+    cp "$BUILD/apk/aligned.apk" "$SCRIPT_DIR/build/agent_hook-unsigned.apk"
+    echo "[build-ci] unsigned compilation artifact; not an installable release"
+    exit 0
+fi
+KEYSTORE="${KEYSTORE:?Provide the persistent signing keystore outside build-ci}"
+[ -f "$KEYSTORE" ] || { echo '[build-ci] persistent signing key missing' >&2; exit 1; }
+: "${KEYSTORE_PASSWORD:?Provide signing password through environment}"
+"$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
     --out "$SCRIPT_DIR/build/agent_hook.apk" "$BUILD/apk/aligned.apk"
 "$BT/apksigner" verify "$SCRIPT_DIR/build/agent_hook.apk"
 

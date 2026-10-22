@@ -2,8 +2,12 @@ name: build-ksu-module
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches: [main, master]
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -17,6 +21,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.12'
+          cache: false
+
+      - name: Check gateway and bridge
+        run: |
+          node --test dsha-plugin/test/gateway.test.cjs dsha-plugin/test/lifecycle.test.mjs
+          cd vd-server-go && go test ./...
 
       # ubuntu-latest already ships an Android SDK at $ANDROID_HOME. Do not use
       # android-actions/setup-android here: it runs `sdkmanager tools`, which no
@@ -32,19 +51,65 @@ jobs:
           ls "$SDK/platforms/android-28/android.jar"
           ls "$SDK/build-tools/34.0.0/aapt" "$SDK/build-tools/34.0.0/d8"
 
-      - name: Build hook APK
+      - name: Compile hook APK without a signing key
+        env:
+          BUILD_UNSIGNED: '1'
         run: bash agent-hook-apk/build-ci.sh
 
-      - name: Pack KernelSU module
+      - name: Test island payloads and permission scopes
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq zip
-          bash ksu-module/pack.sh
+          curl -fLsS --retry 3 https://repo.maven.apache.org/maven2/org/json/json/20231013/json-20231013.jar -o "$RUNNER_TEMP/json.jar"
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          CP="agent-hook-apk/build-ci/classes:agent-hook-apk/build-ci/stubs_classes:$RUNNER_TEMP/json.jar:$SDK/platforms/android-28/android.jar"
+          mkdir -p agent-hook-apk/build-ci/tests
+          javac -encoding UTF-8 -cp "$CP" -d agent-hook-apk/build-ci/tests agent-hook-apk/test/*.java
+          java -cp "agent-hook-apk/build-ci/tests:$CP" com.agent.mobileuse.IslandPayloadSelftest
+          java -cp "agent-hook-apk/build-ci/tests:$CP" com.agent.mobileuse.AgentLiveSelftest
 
-      - name: Upload artifacts
+      - name: Build runtime binaries from source
+        run: bash tools/build-runtime-ci.sh
+
+      - name: Upload compilation artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: agent-mobile-use-ksu
+          name: unsigned-verification-build
           path: |
-            release/*.zip
+            agent-hook-apk/build/agent_hook-unsigned.apk
+            vd-tool-java/bin/*.dex
+            vd-server-go/vd_server
+          retention-days: 14
+
+      - name: Sign with persistent key when configured
+        id: signing
+        if: github.event_name != 'pull_request'
+        env:
+          MODULE_KEYSTORE_BASE64: ${{ secrets.MODULE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MODULE_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$MODULE_KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo 'Signing secrets not configured; release assets are built separately.'
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          KEYSTORE="$RUNNER_TEMP/module-release.keystore"
+          trap 'rm -f "$KEYSTORE"' EXIT
+          printf '%s' "$MODULE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          "$SDK/build-tools/34.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD --out agent-hook-apk/build/agent_hook.apk agent-hook-apk/build/agent_hook-unsigned.apk
+          "$SDK/build-tools/34.0.0/apksigner" verify agent-hook-apk/build/agent_hook.apk
+          echo 'configured=true' >> "$GITHUB_OUTPUT"
+
+      - name: Pack signed module
+        if: steps.signing.outputs.configured == 'true'
+        run: bash ksu-module/pack.sh
+
+      - name: Upload signed artifacts
+        if: steps.signing.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-ksu-module
+          path: |
+            release/agent-mobile-use-ksu-v0.10.0-alpha.zip
             agent-hook-apk/build/agent_hook.apk
           retention-days: 30

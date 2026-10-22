@@ -1,0 +1,12 @@
+*.sh text eol=lf
+*.prop text eol=lf
+ksu-module/system/bin/vd text eol=lf
+*.java text eol=lf
+*.js text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.py text eol=lf
+*.go text eol=lf
+*.apk binary
+*.dex binary
+*.zip binary

@@ -204,6 +204,7 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        GatewayClient.initialize(this);
         mHandler = new Handler(Looper.getMainLooper());
         initDarkWindow();
         initRootLayout();
@@ -512,7 +513,7 @@ public class SettingsActivity extends Activity {
         layout.addView(createSectionHeader("网关节点"));
         LinearLayout connCard = createCardLayout();
         createStatusRow(connCard, "网关节点", "http://127.0.0.1:3070");
-        createStatusRow(connCard, "控制台节点", "http://127.0.0.1:3080");
+        createStatusRow(connCard, "控制台入口", installedDshaVersion() != null ? "DSHA 应用内会话" : "http://127.0.0.1:3080");
         layout.addView(connCard);
 
         // 2. 通信密钥
@@ -868,10 +869,11 @@ public class SettingsActivity extends Activity {
             @Override
             public void run() {
                 // 1. Check 3080 port listening
-                final boolean dshListening = isPort3080Listening();
+                final String dshaVersion = installedDshaVersion();
+                final boolean dshListening = dshaVersion == null && isPort3080Listening();
 
                 // 2. Fetch DSH version directly from 3080 RPC
-                final String dshVersion = dshListening ? fetchDshVersionFrom3080() : "[OFFLINE]";
+                final String dshVersion = dshaVersion != null ? "DSHA " + dshaVersion : dshListening ? fetchDshVersionFrom3080() : "[OFFLINE]";
 
                 // 3. Query 3070 daemon status
                 final JSONObject status3070 = fetchGatewayStatusFrom3070();
@@ -893,7 +895,10 @@ public class SettingsActivity extends Activity {
                     public void run() {
                         // Update 3080 Port status
                         if (mTvStatusDshPort != null) {
-                            if (dshListening) {
+                            if (dshaVersion != null) {
+                                mTvStatusDshPort.setText("[已安装] DSHA");
+                                mTvStatusDshPort.setTextColor(Color.parseColor("#49E9A6"));
+                            } else if (dshListening) {
                                 mTvStatusDshPort.setText("[ONLINE] (3080)");
                                 mTvStatusDshPort.setTextColor(Color.parseColor("#49E9A6"));
                             } else {
@@ -986,10 +991,16 @@ public class SettingsActivity extends Activity {
         }).start();
     }
 
+    private String installedDshaVersion() {
+        try { return getPackageManager().getPackageInfo("com.dsh.client", 0).versionName; }
+        catch (android.content.pm.PackageManager.NameNotFoundException ignored) { return null; }
+    }
+
     private boolean isPort3080Listening() {
         try {
             URL url = new URL("http://127.0.0.1:3080/");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(1500);
             conn.setReadTimeout(1500);
@@ -1010,6 +1021,7 @@ public class SettingsActivity extends Activity {
 
             URL url = new URL("http://127.0.0.1:3080/api/pluginManager/listBundles");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
             conn.setRequestMethod("POST");
             conn.setConnectTimeout(2500);
             conn.setReadTimeout(3000);
@@ -1072,6 +1084,7 @@ public class SettingsActivity extends Activity {
         try {
             URL url = new URL("http://127.0.0.1:3070/api/status");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(2000);
             conn.setReadTimeout(2000);
@@ -1095,6 +1108,7 @@ public class SettingsActivity extends Activity {
         try {
             URL url = new URL("http://127.0.0.1:3070/api/audio/status");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(1500);
             conn.setReadTimeout(1500);
@@ -1121,6 +1135,7 @@ public class SettingsActivity extends Activity {
                 try {
                     URL url = new URL("http://127.0.0.1:3070/api/audio/toggle");
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
                     conn.setRequestMethod("POST");
                     conn.setConnectTimeout(2000);
                     conn.setReadTimeout(2000);
@@ -1147,6 +1162,7 @@ public class SettingsActivity extends Activity {
                 try {
                     URL url = new URL("http://127.0.0.1:3070/api/mode?mode=" + mode);
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
                     conn.setRequestMethod("GET");
                     conn.setConnectTimeout(2000);
                     conn.setReadTimeout(2000);
@@ -1183,6 +1199,7 @@ public class SettingsActivity extends Activity {
                 try {
                     URL url = new URL("http://127.0.0.1:3070/api/auth/secret");
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
                     conn.setRequestMethod("POST");
                     conn.setConnectTimeout(2000);
                     conn.setReadTimeout(2000);

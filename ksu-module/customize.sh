@@ -1,18 +1,25 @@
 SKIPUNZIP=0
 
 ui_print "**********************************************"
-ui_print "*  Agent Mobile Sandbox & Tools v0.9.0-alpha *"
+ui_print "* Agent Mobile Sandbox & Tools v0.10.0-alpha *"
 ui_print "*               作者：酸小明                 *"
 ui_print "**********************************************"
 
-ui_print "- 正在安装纯隐形 LSPosed 跨屏路由与输入法隔离补丁 (v0.9.0-alpha)..."
+ui_print "- 正在安装 LSPosed 跨屏路由与输入法隔离补丁 (v0.10.0-alpha)..."
 ui_print "- 检测到 HyperOS/MIUI 时将启用超级岛(焦点通知)适配与 XMSF 校验解锁"
+NOTIFICATION_WAS_GRANTED=0
+if dumpsys package com.agent.mobileuse 2>/dev/null | grep -q 'android.permission.POST_NOTIFICATIONS: granted=true'; then
+    NOTIFICATION_WAS_GRANTED=1
+fi
 pm install -r "$MODPATH/apk/agent_hook.apk" >/dev/null 2>&1
 if [ $? -eq 0 ]; then
     ui_print "- Hook 补丁安装成功"
     pm grant com.agent.mobileuse android.permission.RECORD_AUDIO >/dev/null 2>&1
+    if [ "$NOTIFICATION_WAS_GRANTED" = 1 ]; then
+        pm grant com.agent.mobileuse android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
+    fi
 else
-    ui_print "! 警告: APK 安装失败，请检查系统环境"
+    abort "APK 覆盖安装失败：请核对签名，模块安装已停止；未删除 App 数据。"
 fi
 
 # Configure LSPosed scope DB
@@ -24,14 +31,14 @@ if [ -f "$LSP_DB" ] && [ -x "$SQLITE_BIN" ]; then
     ui_print "- 正在自动配置 LSPosed 模块作用域..."
     APK_PATH=$(pm path com.agent.mobileuse 2>/dev/null | head -n 1 | cut -d':' -f2)
     if [ -n "$APK_PATH" ]; then
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO modules (module_pkg_name, apk_path) VALUES ('com.agent.mobileuse', '$APK_PATH');" 2>/dev/null
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO modules_state (module_pkg_name, user_id, enabled) VALUES ('com.agent.mobileuse', 0, 1);" 2>/dev/null
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'android', 0);" 2>/dev/null
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'system', 0);" 2>/dev/null
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.android.systemui', 0);" 2>/dev/null
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.agent.mobileuse', 0);" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO modules (module_pkg_name, apk_path) VALUES ('com.agent.mobileuse', '$APK_PATH'); UPDATE modules SET apk_path='$APK_PATH' WHERE module_pkg_name='com.agent.mobileuse';" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO modules_state (module_pkg_name, user_id, enabled) VALUES ('com.agent.mobileuse', 0, 1); UPDATE modules_state SET enabled=1 WHERE module_pkg_name='com.agent.mobileuse' AND user_id=0;" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'android', 0);" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'system', 0);" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.android.systemui', 0);" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.agent.mobileuse', 0);" 2>/dev/null
         # HyperOS/MIUI: XMSF verifies the focus-notification (super island) whitelist.
-        "$SQLITE_BIN" "$LSP_DB" "INSERT OR REPLACE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.xiaomi.xmsf', 0);" 2>/dev/null
+        "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.xiaomi.xmsf', 0);" 2>/dev/null
         ui_print "- LSPosed 作用域配置完成: $APK_PATH"
     fi
 fi

@@ -67,6 +67,7 @@ public class DemoDialogActivity extends Activity {
                 try {
                     java.net.URL url = new java.net.URL("http://127.0.0.1:3070/api/view_state");
                     java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
                     conn.setRequestMethod("POST");
                     conn.setConnectTimeout(800);
                     conn.setReadTimeout(800);
@@ -203,6 +204,7 @@ public class DemoDialogActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        GatewayClient.initialize(this);
         overridePendingTransition(0, 0);
 
         Intent intent = getIntent();
@@ -212,6 +214,8 @@ public class DemoDialogActivity extends Activity {
             if (mTargetSessionId == null) mTargetSessionId = intent.getStringExtra("session");
             mSkipGlow = intent.getBooleanExtra("skip_glow", false);
         }
+
+        if (openDshaForDefaultTarget()) return;
 
         mMainHandler = new Handler(Looper.getMainLooper());
 
@@ -293,7 +297,19 @@ public class DemoDialogActivity extends Activity {
             mTargetUrl = null;
             mTargetSessionId = null;
         }
+        if (openDshaForDefaultTarget()) return;
         loadWebConsole();
+    }
+
+    private boolean openDshaForDefaultTarget() {
+        if (mTargetUrl != null && !mTargetUrl.isEmpty()) return false;
+        Intent host = getPackageManager().getLaunchIntentForPackage("com.dsh.client");
+        if (host == null) return false;
+        host.putExtra("open_web", true);
+        host.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(host);
+        finish();
+        return true;
     }
 
     private int dpToPx(int dp) {
@@ -998,6 +1014,7 @@ public class DemoDialogActivity extends Activity {
                                 }
                             }
                             Log.i(TAG, "Navigating WebView to: " + url);
+                            GatewayClient.authorizeWeb(DemoDialogActivity.this);
                             mWebView.loadUrl(url);
                         }
                     }
@@ -1014,6 +1031,7 @@ public class DemoDialogActivity extends Activity {
             try {
                 java.net.URL url = new java.net.URL("http://127.0.0.1:3070/api/auth/secret");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                GatewayClient.authorize(null, conn);
                 conn.setConnectTimeout(400);
                 conn.setReadTimeout(400);
                 if (conn.getResponseCode() == 200) {

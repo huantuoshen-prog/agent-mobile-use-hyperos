@@ -1,15 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"os"
 	"os/exec"
-	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 )
 
 var (
@@ -40,30 +39,64 @@ func setAudioMuteEnabled(enabled bool) {
 	}
 }
 
+var originalAudioModes = make(map[string]string)
+
+func audioModeFromOutput(out string) (string, bool) {
+	re := regexp.MustCompile(`PLAY_AUDIO:\s*(allow|ignore|default|foreground|deny)`)
+	if match := re.FindStringSubmatch(out); len(match) == 2 {
+		return match[1], true
+	}
+	if strings.Contains(out, "No operations") {
+		return "default", true
+	}
+	return "", false
+}
+func saveAudioJournalLocked() error {
+	b, err := json.Marshal(originalAudioModes)
+	if err != nil {
+		return err
+	}
+	p := filepath.Join(privateStateDir, "audio-restore.json")
+	if err = os.WriteFile(p+".tmp", b, 0600); err != nil {
+		return err
+	}
+	return os.Rename(p+".tmp", p)
+}
 func setPackageMuted(pkg string, userId int, mute bool) {
 	if pkg == "" || strings.Contains(pkg, "launcher") || strings.Contains(pkg, "systemui") || pkg == "android" {
 		return
 	}
-	mode := "allow"
-	if mute {
-		mode = "ignore"
-	}
-
-	uStr := strconv.Itoa(userId)
-	cmd := exec.Command("/system/bin/cmd", "appops", "set", "--user", uStr, pkg, "PLAY_AUDIO", mode)
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("[audio] failed to set %s (user %d) PLAY_AUDIO %s: %v\n", pkg, userId, mode, err)
-		return
-	}
-	fmt.Printf("[audio] %s (user %d) PLAY_AUDIO -> %s\n", pkg, userId, mode)
-
+	key := strconv.Itoa(userId) + ":" + pkg
 	audioMu.Lock()
+	defer audioMu.Unlock()
+	original, tracked := originalAudioModes[key]
 	if mute {
-		mutedPackages[pkg] = userId
-	} else {
-		delete(mutedPackages, pkg)
+		if !tracked {
+			out, err := exec.Command("/system/bin/cmd", "appops", "get", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO").Output()
+			if err != nil {
+				return
+			}
+			var ok bool
+			original, ok = audioModeFromOutput(string(out))
+			if !ok {
+				return
+			}
+			originalAudioModes[key] = original
+			if saveAudioJournalLocked() != nil {
+				delete(originalAudioModes, key)
+				return
+			}
+		}
+		if exec.Command("/system/bin/cmd", "appops", "set", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO", "ignore").Run() == nil {
+			mutedPackages[pkg] = userId
+		}
+	} else if tracked {
+		if exec.Command("/system/bin/cmd", "appops", "set", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO", original).Run() == nil {
+			delete(originalAudioModes, key)
+			delete(mutedPackages, pkg)
+			_ = saveAudioJournalLocked()
+		}
 	}
-	audioMu.Unlock()
 }
 
 func parseUserIDsFromOutput(out string) []int {
@@ -91,36 +124,21 @@ func parseUserIDs() []int {
 	return parseUserIDsFromOutput(string(out))
 }
 
-// unmuteAllAudio restores all muted packages and sweeps system AppOps to prevent stuck silence
+// unmuteAllAudio restores only AppOps recorded by this module before muting.
 func unmuteAllAudio() {
 	audioMu.Lock()
-	toUnmute := make(map[string]int, len(mutedPackages))
-	for k, v := range mutedPackages {
-		toUnmute[k] = v
-	}
-	mutedPackages = make(map[string]int)
-	audioMu.Unlock()
-
-	for pkg, uId := range toUnmute {
-		uStr := strconv.Itoa(uId)
-		_ = exec.Command("/system/bin/cmd", "appops", "set", "--user", uStr, pkg, "PLAY_AUDIO", "allow").Run()
-	}
-
-	// Defensive sweep: scan all users for any orphaned PLAY_AUDIO ignore
-	users := parseUserIDs()
-	for _, uId := range users {
-		uStr := strconv.Itoa(uId)
-		out, err := exec.Command("/system/bin/cmd", "appops", "query-op", "--user", uStr, "PLAY_AUDIO", "ignore").Output()
-		if err == nil && len(out) > 0 {
-			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-				pkg := strings.TrimSpace(line)
-				if pkg != "" {
-					fmt.Printf("[audio_sweep] restoring orphaned muted package: %s (user %d)\n", pkg, uId)
-					_ = exec.Command("/system/bin/cmd", "appops", "set", "--user", uStr, pkg, "PLAY_AUDIO", "allow").Run()
-				}
-			}
+	defer audioMu.Unlock()
+	for key, original := range originalAudioModes {
+		parts := strings.SplitN(key, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if exec.Command("/system/bin/cmd", "appops", "set", "--user", parts[0], parts[1], "PLAY_AUDIO", original).Run() == nil {
+			delete(originalAudioModes, key)
+			delete(mutedPackages, parts[1])
 		}
 	}
+	_ = saveAudioJournalLocked()
 }
 
 // reconcileVdAudio synchronizes package audio states with current VD tasks
@@ -172,16 +190,10 @@ func reconcileVdAudio(vdDid int) {
 
 // initAudioGuard sets up fail-safe sweeps and signal handlers
 func initAudioGuard() {
-	// 1. Startup self-healing sweep to clear any previous crash remnants
+	if b, err := os.ReadFile(filepath.Join(privateStateDir, "audio-restore.json")); err == nil {
+		audioMu.Lock()
+		_ = json.Unmarshal(b, &originalAudioModes)
+		audioMu.Unlock()
+	}
 	unmuteAllAudio()
-
-	// 2. Trap process termination signals to guarantee clean audio restoration
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		sig := <-sigChan
-		fmt.Printf("[audio] caught signal %v, restoring audio for all apps...\n", sig)
-		unmuteAllAudio()
-		os.Exit(0)
-	}()
 }

@@ -6,6 +6,11 @@ while [ "$(getprop sys.boot_completed)" != "1" ]; do
     sleep 2
 done
 
+# CE 私有目录在首次解锁后才可用，token 必须交付到应用目录后再接受调用。
+while [ "$(getprop sys.user.0.ce_available)" = "false" ]; do
+    sleep 2
+done
+
 # Wait extra seconds for network/system stability
 sleep 3
 

@@ -1,103 +1,42 @@
-# dsh-mobile-use（DSHA 插件）
+# dsh-mobile-use 0.3.0（DSHA 插件）
 
-把 [agent-mobile-use](../README.md) 的本地网关 `http://127.0.0.1:3070` 包装成 DSHA 可用的 DSH 工具。
+面向使用 DSHA 且手机已 root 的用户，把 agent_mobile_use 0.10.0 的后台虚拟副屏接入 DSHA，并从宿主真实任务事件同步小米超级岛状态。支持 DSH 0.2.0-rc.2；注册普通 MCP tools。
 
-- 宿主：DSHA（`com.dsh.client`）内置的 DSH Web 运行时
-- 形态：Cordis 插件 + MCP stdio server（不监听端口、不引入新鉴权）
-- 依赖的网关：KernelSU 模块 `agent_mobile_use`（`vd_server`，只监听 `127.0.0.1:3070`）
-- 工具对外名：`mcp__mobile-use__<tool>`
+## 状态与工具
 
-## 与 DSHA 内置能力的关系
+运行中、前台控制、后台副屏、等待回答、完成、失败、停止分别使用不同标题、图标和颜色。完成状态由 turn/end completed 触发；todo 清单只提供实际进度。
 
-| 能力 | 内置 `dsha-android`（:3090） | 内置 `dsha-vscreen`（:3090） | 本插件（:3070） |
-| --- | --- | --- | --- |
-| 操作屏幕 | 主屏（无障碍，无需 root） | App 侧虚拟屏 | DisplayManager 真虚拟屏（root） |
-| 虚拟屏 | 无 | 有（实验） | 有，且与主屏隔离、IME 隔离 |
-| 通知 | 普通通知 | 普通通知 | HyperOS 超级岛（胶囊/完成/提问） |
-| 依赖 | 无障碍服务 | ADB/Shizuku/Root 任一 | KernelSU/LSPosed 模块 |
-
-`@deepseek-ai/dsh-computer-use` 的 provider 在全进程只能注册一个，DSHA 已被
-`dsha-computer-use-android` 占用，因此本插件**只注册普通 tools**，不注册
-computer-use provider。
-
-## 工具
-
-| 工具 | 作用 |
+| 工具（前缀 mcp__mobile-use__） | 作用 |
 | --- | --- |
-| `mobile_status` | 网关状态：mode、display_id、尺寸、会话、LSPosed 是否生效 |
-| `mobile_start` / `mobile_stop` | 创建 / 回收 root 虚拟屏 |
-| `mobile_mode` | `foreground`（主屏 display 0） / `background`（虚拟屏，迁移当前任务） |
-| `mobile_screenshot` | 截取当前目标显示（JPEG，MCP image content） |
-| `mobile_ui_dump` | 读无障碍控件树（`no_system_ui`/`raw` 可选） |
-| `mobile_action` | `observe/click/set_value/swipe/key/launch_app/wait` |
-| `mobile_apps` | 列出已安装应用（`query` 过滤） |
-| `mobile_notify` | 发任务通知；虚拟屏模式下走超级岛（`total/completed/is_completed`） |
-| `mobile_question` | 投递交互提问卡片到设备（回答不经网关回传） |
-| `mobile_question_cancel` | 取消未回答的提问 |
+| mobile_status / mobile_live_status | 网关、显示和任务实况 |
+| mobile_start / mobile_stop | 创建、回收 root 虚拟屏 |
+| mobile_mode | foreground / background / idle |
+| mobile_resize | 调整虚拟屏尺寸与 DPI |
+| mobile_screenshot / mobile_ui_dump | 当前目标显示的截图、控件树 |
+| mobile_action | observe / click / set_value / swipe / key / launch_app / wait |
+| mobile_apps | 应用列表 |
+| mobile_audio_status / mobile_audio_toggle | 查询、设置副屏静音 |
+| mobile_notify | 补充进度说明 |
+| mobile_question / mobile_question_cancel | 投递、取消问题通知 |
+
+dsha-android 的主屏与 dsha-vscreen 的 App 虚拟屏保留。root 虚拟屏是独立后端，切换后必须重新读屏。真正可回答的问题使用宿主 ask_user_question；插件同步等待与恢复状态。
 
 ## 安装
 
-前提：设备已装 KernelSU/LSPosed 模块 `agent_mobile_use`，且
-`curl http://127.0.0.1:3070/api/status` 在设备上可用（DSHA 侧通过设备 shell 执行）。
+先安装配套模块，在控制台启用超级岛。在 DSHA 的插件管理器中导入 `dsh-mobile-use-0.3.0.zip`，按界面提示确认安装。模块副屏不要求开启 DSHA 自带副屏或 DSHA Root Shell。
 
-推荐用 DSHA 自带插件管理器：
+按 DSHA 的提示重启 Web。插件管理器负责 profile、启动快照和符号链接。旧版 0.9 网关不包含自动实况接口，需要配套升级。
 
-```sh
-# 在 DSHA 的设备 shell 里
-dsha-plugin import /sdcard/Download/dsh-mobile-use-0.1.0.zip
-# 或从目录安装
-dsha-plugin install /root/dsh-mobile-use
-```
+## 验证与回滚
 
-装完必须重启 DSHA Web（App 内「进入对话」触发一次新的 `STARTUP_STAGE`），
-插件才会被加载。
+检查插件已加载、十五个工具已出现，先执行 mobile_status，再验证真实任务开始、屏幕控制、回答问题和结束。后台测试顺序：mobile_start → mobile_mode(background) → mobile_ui_dump → mobile_action → mobile_screenshot → mobile_mode(idle) → mobile_stop。
 
-手工安装（等价于 `import` 做的事）：
+回滚通过插件管理器的 rollback，删除通过 delete dsh-mobile-use；使用前先查看 dsha-plugin 命令帮助。控制台 App 的签名迁移与插件回滚分别处理。
 
-1. 把本目录复制到 guest `/root/dsh-mobile-use`
-2. `ln -s ../../usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules /root/dsh-mobile-use/node_modules`
-3. `/root/.dsh/profiles/web/package.json` 增加
-   `"dsh-mobile-use": "link:/root/dsh-mobile-use"`（dependencies）与 bundles 条目
-4. 启动快照 `startup-config-snapshots/<uuid>/0` 同步添加同两条
-5. 重启 DSHA Web
+## 本机控制通道
 
-## 验证
+网关监听 127.0.0.1:3070。除只读 /api/status 外，接口需要私有 token。模块将其交付到 guest /root/.dsh/mobile-use-token，插件也支持 MOBILE_USE_TOKEN_FILE；不读取模型 API key。
 
-1. 加载：`grep -a dsh-mobile-use /root/dsh-web.log`，应出现
-   `[DSHA_STARTUP] ... "type":"loading","plugin":"dsh-mobile-use"` 与 `"type":"loaded"`。
-2. 工具出现：DSHA 会话的工具列表里有 `mcp__mobile-use__mobile_status`。
-3. 端到端：
-   - `mcp__mobile-use__mobile_status` → `{"status":"stopped", ...}`
-   - `mcp__mobile-use__mobile_start` → `display_id`
-   - `mcp__mobile-use__mobile_mode {"mode":"background"}`
-   - `mcp__mobile-use__mobile_action {"action":"launch_app","package":"com.android.settings"}`
-   - `mcp__mobile-use__mobile_screenshot` → image
-4. 超级岛：控制台开「超级岛通知（HyperOS）」后，
-   `mcp__mobile-use__mobile_notify` 会在状态栏出现胶囊岛。
+工具参数声明兼容 DSH 的 JSON Schema 子集，数值范围和坐标长度由桥接执行端检查。响应体下载也受超时保护；取消排队动作后不会发送该动作。
 
-## 回滚
-
-```sh
-# 恢复 profile 与启动快照备份（安装时生成的 .bak-*），删除：
-rm -rf /root/dsh-mobile-use
-rm -f  /root/.dsh/profiles/web/node_modules/dsh-mobile-use
-```
-
-再重启 DSHA Web。
-
-## 安全边界
-
-- 网关 `3070` **无鉴权**，只监听回环；本插件不改变这一点。
-- 不要把 3070 暴露到局域网，也不要在其上叠加宽松 CORS 的网页调用。
-- 虚拟屏需要 root 模块；插件本身不申请任何新权限。
-
-## v0.2.0：给模型的使用指引
-
-- 插件新增 `systemPrompt` section `dsh:mobile-use-guide`（`lib/index.js`），在会话开头告诉模型：
-  - 什么时候用本插件（后台虚拟屏、任务进度/完成上岛）而不是 `dsha-android`；
-  - 标准顺序 `mobile_status → mobile_start → mobile_mode → mobile_ui_dump → mobile_action → mobile_notify/mobile_question → mobile_stop`；
-  - 截图/读屏前必须把 mode 切到非 idle；
-  - 「超级岛通知（HyperOS）」开关没开时**不要反复重试工具**，直接告诉用户去控制台打开。
-- 修复配套的内核问题：旧版 `GlowService.onDestroy` / `QuestionActivity.dismissCapsule` 会 `clear()` 整个
-  `agent_capsule_state`，把控制台里的开关（含超级岛）一起清掉，导致「开关自己变回关闭、通知退回普通栏」。
-  v0.9.0-alpha 起只清运行态键（mode/session_id/session_title/last_completed_sid），保留用户开关。
+状态协议、签名与验收边界见完整源码库中的 docs/live-agent-0.10.md。

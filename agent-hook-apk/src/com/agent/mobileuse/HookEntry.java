@@ -10,6 +10,10 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class HookEntry implements IXposedHookLoadPackage {
+    private static final java.util.Set<java.lang.reflect.Member> focusHooks =
+            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<java.lang.reflect.Member, Boolean>());
+    private static final java.util.Set<Integer> agentDisplayIds =
+            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<Integer, Boolean>());
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -44,17 +48,18 @@ public class HookEntry implements IXposedHookLoadPackage {
     private void hookSystemServer(XC_LoadPackage.LoadPackageParam lpparam) {
         XposedBridge.log("[AgentMobileUseHook] System server loaded: " + lpparam.packageName);
         ClassLoader cl = lpparam.classLoader;
+        trackAgentDisplays(cl);
 
         // Force allow hosting tasks on virtual display
         hookAllMethodsReturningTrue(cl, "android.view.Display", "canHostTasks");
-        hookAllMethodsReturningTrue(cl, "com.android.server.wm.LogicalDisplay", "canHostTasksLocked");
+        hookAllMethodsReturningTrue(cl, "com.android.server.display.LogicalDisplay", "canHostTasksLocked");
         hookAllMethodsReturningTrue(cl, "com.android.server.wm.ActivityTaskSupervisor", "isCallerAllowedToLaunchOnDisplay");
         hookAllMethodsReturningTrue(cl, "com.android.server.wm.ActivityTaskSupervisor", "isCallerAllowedToLaunchOnTaskDisplayArea");
         hookAllMethodsReturningTrue(cl, "com.android.server.wm.ActivityTaskSupervisor", "canPlaceEntityOnDisplay");
         hookAllMethodsReturningTrue(cl, "com.android.server.wm.ActivityRecord", "canBeLaunchedOnDisplay");
         hookAllMethodsReturningTrue(cl, "com.android.server.wm.Task", "canBeLaunchedOnDisplay");
         hookAllMethodsReturningTrue(cl, "com.android.server.wm.RootWindowContainer", "canLaunchOnDisplay");
-        hookAllMethodsReturningTrue(cl, "com.android.server.display.DisplayManagerService", "validatePackageName");
+        // 包名/UID 校验适用于所有应用，不能为了一个虚拟屏全局绕过。
 
         // Isolate InputMethodManagerService (IME) to prevent soft keyboard popup on Display 0
         hookImmsDisplayIsolation(cl);
@@ -96,7 +101,14 @@ public class HookEntry implements IXposedHookLoadPackage {
             if (clazz == null) {
                 throw new ClassNotFoundException(className);
             }
-            XposedBridge.hookAllMethods(clazz, methodName, XC_MethodReplacement.returnConstant(Boolean.TRUE));
+            for (java.lang.reflect.Method method : clazz.getDeclaredMethods()) {
+                if (!methodName.equals(method.getName()) || method.getReturnType() != boolean.class) continue;
+                XposedBridge.hookMethod(method, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        if (isAgentDisplayCall(param.thisObject, param.args, methodName)) param.setResult(Boolean.TRUE);
+                    }
+                });
+            }
         } catch (Throwable t) {
             XposedBridge.log("[AgentMobileUseHook] Failed to hook " + className + "#" + methodName + ": " + t.getMessage());
         }
@@ -123,6 +135,8 @@ public class HookEntry implements IXposedHookLoadPackage {
             } catch (Throwable ignored) {
             }
         }
+        try { return Class.forName(className, false, ClassLoader.getSystemClassLoader()); }
+        catch (Throwable ignored) {}
         try {
             return Class.forName(className);
         } catch (Throwable ignored) {
@@ -140,7 +154,7 @@ public class HookEntry implements IXposedHookLoadPackage {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     int displayId = (int) param.args[0];
-                    if (displayId != 0) {
+                    if (agentDisplayIds.contains(displayId)) {
                         param.setResult(displayId);
                     }
                 }
@@ -148,6 +162,47 @@ public class HookEntry implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log("[AgentMobileUseHook] Failed to hook IMMS: " + t.getMessage());
         }
+    }
+
+    private static boolean isAgentDisplayCall(Object owner, Object[] args, String methodName) {
+        if ("AgentVirtualDisplay".equals(invokeNoArg(owner, "getName"))) return true;
+        Object display = invokeNoArg(owner, "getDisplayContent");
+        Object info = getFieldSafe(display, "mDisplayInfo");
+        if ("AgentVirtualDisplay".equals(getFieldSafe(info, "name"))) return true;
+        if (args == null) return false;
+        // 只检查方法中已知的 displayId 位置，callingUid/flags 数值相同不能放行。
+        int displayIndex = "isCallerAllowedToLaunchOnDisplay".equals(methodName) ? 2
+                : ("canPlaceEntityOnDisplay".equals(methodName) || "canBeLaunchedOnDisplay".equals(methodName)) ? 0 : -1;
+        if (displayIndex >= 0 && displayIndex < args.length && args[displayIndex] instanceof Integer
+                && agentDisplayIds.contains((Integer) args[displayIndex])) return true;
+        for (Object arg : args) {
+            if (arg == null) continue;
+            String type = arg.getClass().getName();
+            if (!"com.android.server.wm.TaskDisplayArea".equals(type) && !"com.android.server.wm.DisplayContent".equals(type)) continue;
+            Object id = invokeNoArg(arg, "getDisplayId");
+            if (id instanceof Integer && agentDisplayIds.contains((Integer) id)) return true;
+        }
+        return false;
+    }
+
+    private void trackAgentDisplays(ClassLoader cl) {
+        try {
+            Class<?> binder = findClassAny("com.android.server.display.DisplayManagerService$BinderService", cl);
+            if (binder == null) return;
+            XposedBridge.hookAllMethods(binder, "createVirtualDisplay", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    Object result = param.getResult();
+                    if (!(result instanceof Integer) || (Integer) result <= 0 || param.args == null) return;
+                    for (Object arg : param.args) {
+                        if (arg != null && "android.hardware.display.VirtualDisplayConfig".equals(arg.getClass().getName())
+                                && "AgentVirtualDisplay".equals(invokeNoArg(arg, "getName"))) {
+                            agentDisplayIds.add((Integer) result);
+                            return;
+                        }
+                    }
+                }
+            });
+        } catch (Throwable t) { XposedBridge.log("[AgentMobileUseHook] Agent display tracking unavailable"); }
     }
 
     private static Object getFieldSafe(Object obj, String fieldName) {
@@ -479,8 +534,17 @@ public class HookEntry implements IXposedHookLoadPackage {
                                                   String methodName, boolean quiet) {
         try {
             Class<?> clazz = XposedHelpers.findClass(className, cl);
-            XposedBridge.hookAllMethods(clazz, methodName, XC_MethodReplacement.returnConstant(Boolean.TRUE));
-            XposedBridge.log("[AgentMobileUseHook] " + className + "#" + methodName + " -> true");
+            int installed = 0;
+            for (java.lang.reflect.Method method : clazz.getDeclaredMethods()) {
+                if (!methodName.equals(method.getName()) || method.getReturnType() != boolean.class || !focusHooks.add(method)) continue;
+                XposedBridge.hookMethod(method, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        if (isAgentFocusCall(param.args)) param.setResult(Boolean.TRUE);
+                    }
+                });
+                installed++;
+            }
+            if (installed > 0) XposedBridge.log("[AgentMobileUseHook] " + className + "#" + methodName + " scoped to agent (" + installed + ")");
         } catch (Throwable t) {
             if (!quiet) {
                 XposedBridge.log("[AgentMobileUseHook] Failed to hook " + className + "#"
@@ -509,6 +573,7 @@ public class HookEntry implements IXposedHookLoadPackage {
                         return;
                     }
                     Object session = param.thisObject;
+                    if (!isAgentAuthSession(session)) return;
                     try {
                         java.lang.reflect.Field codeField = findFieldInHierarchy(session.getClass(), "a");
                         if (codeField != null && codeField.getType() == int.class) {
@@ -529,6 +594,32 @@ public class HookEntry implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log("[AgentMobileUseHook] Failed to hook XMSF AuthSession: " + t.getMessage());
         }
+    }
+
+    static boolean isAgentFocusCall(Object[] args) {
+        if (args == null) return false;
+        for (Object value : args) {
+            if ("com.agent.mobileuse".equals(value)) return true;
+            if (value instanceof String[]) {
+                for (String pkg : (String[]) value) if ("com.agent.mobileuse".equals(pkg)) return true;
+            }
+            if (value != null && "android.service.notification.StatusBarNotification".equals(value.getClass().getName())) {
+                if ("com.agent.mobileuse".equals(invokeNoArg(value, "getPackageName"))) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isAgentAuthSession(Object session) {
+        if (session == null) return false;
+        for (Class<?> c = session.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (f.getType() != String.class || java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                try { f.setAccessible(true); if ("com.agent.mobileuse".equals(f.get(session))) return true; }
+                catch (Throwable ignored) {}
+            }
+        }
+        return false;
     }
 
     /** Find a declared field on the class or any superclass. */

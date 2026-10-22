@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestAudioOriginalModesArePreserved(t *testing.T) {
+	for out, want := range map[string]string{"PLAY_AUDIO: ignore; time=123": "ignore", "PLAY_AUDIO: foreground": "foreground", "No operations.": "default"} {
+		got, ok := audioModeFromOutput(out)
+		if !ok || got != want {
+			t.Fatalf("%q: %q %v", out, got, ok)
+		}
+	}
+	if _, ok := audioModeFromOutput("permission denied"); ok {
+		t.Fatal("unknown state converted to allow")
+	}
+}
+
 func TestParseUserIDsFromOutput(t *testing.T) {
 	sample := `Users:
 	UserInfo{0:机主:4c13} running

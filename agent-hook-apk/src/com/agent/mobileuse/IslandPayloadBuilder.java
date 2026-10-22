@@ -99,7 +99,27 @@ public final class IslandPayloadBuilder {
     public static String question(int protocol, String title, String question,
                                   String picKey, ActionRef[] actions) {
         return build(protocol, "agent_question", "需要确认", title, "#FFA726",
-                title, question, 2, 1800, picKey, false, null, null, actions);
+                title, question, 2, 1800, picKey, true, null, null, actions);
+    }
+
+    /** 实况任务：大岛、展开卡片、息屏文案共用同一真实状态。 */
+    public static String live(int protocol, String state, String title, String detail,
+                              int total, int completed, ActionRef[] actions) {
+        String text = detail == null ? "" : detail;
+        if (total > 0) text = completed + "/" + total + (text.isEmpty() ? "" : " · " + text);
+        String json = build(protocol, "agent_live_" + state, AgentState.title(state), AgentState.title(state),
+                AgentState.color(state), AgentState.title(state), title == null || title.isEmpty() ? text : title,
+                "waiting".equals(state) ? 2 : 1, "completed".equals(state) || "failed".equals(state) || "cancelled".equals(state) ? 120 : 3600,
+                PIC_CAPSULE, true, null, "background".equals(state) ? "outer_glow" : null, actions);
+        if (json == null) return null;
+        try {
+            JSONObject root = new JSONObject(json); JSONObject v2 = root.getJSONObject("param_v2");
+            v2.getJSONObject("baseInfo").put("title", cut(title, 24)).put("content", cut(text, 80));
+            v2.put("extraInfo", new JSONObject().put("agentState", state));
+            // 本机状态更新不反复弹出展开卡片。
+            v2.put("enableFloat", false).put("filterWhenNoPermission", false);
+            return utf8Length(root.toString()) <= PARAM_MAX_BYTES ? root.toString() : json;
+        } catch (JSONException ignored) { return json; }
     }
 
     private static String build(int protocol, String business, String aodTitle, String ticker,
@@ -197,12 +217,10 @@ public final class IslandPayloadBuilder {
                     // 2 = title-only button (HyperAction.getType() semantics:
                     // progress -> 1, no icon + title -> 2, otherwise 0).
                     item.put("type", 2);
-                    // We always ship our own PendingIntent under the
-                    // "miui.focus.actions" Bundle, so the reference is an
-                    // actionIntent, not a predefined system action name.
-                    item.put("actionIntent", ACTION_KEY_PREFIX + action.key);
+                    // A resource key references Notification.Action in extras.
+                    // actionIntent is reserved for a serialized Intent URI.
+                    item.put("action", ACTION_KEY_PREFIX + action.key);
                     item.put("actionTitle", cut(action.title, 6));
-                    item.put("actionIntentType", action.intentType);
                     actionArray.put(item);
                 }
             }

@@ -462,6 +462,18 @@ func isGlowServiceAlive() bool {
 }
 
 func resolveCapsuleAction() string {
+	if task, ok := liveTasks.snapshot(); ok {
+		switch task.Phase {
+		case "foreground":
+			return "START_FOREGROUND"
+		case "background":
+			return "START_BACKGROUND"
+		case "waiting":
+			return "START_WAITING"
+		default:
+			return "START_RUNNING"
+		}
+	}
 	if !getSessionActive() {
 		return "STOP" // P5: 待机/未运行，彻底注销胶囊与光效
 	}
@@ -501,6 +513,13 @@ func updateCapsuleState() {
 	curPID := getGlowPID()
 
 	sid, title := getSessionMeta()
+	live, hasLive := liveTasks.snapshot()
+	detailKey := ""
+	if hasLive {
+		sid = live.SessionID
+		title = live.Title
+		detailKey = fmt.Sprintf("%s:%s:%s:%s:%d:%d", live.TurnID, live.Phase, live.DisplayBackend, live.Detail, live.Total, live.Completed)
+	}
 
 	if action == "STOP" {
 		if !isGlowServiceAlive() && lastAppliedCapsuleAction == "STOP" {
@@ -508,32 +527,34 @@ func updateCapsuleState() {
 		}
 	} else {
 		// Only early-return if action, process AND title are identical!
-		if lastAppliedCapsuleAction == action && isGlowServiceAlive() && (curPID > 0 && curPID == lastGlowPID) && (lastAppliedCapsuleTitle == title) {
+		if lastAppliedCapsuleAction == action && isGlowServiceAlive() && (curPID > 0 && curPID == lastGlowPID) && (lastAppliedCapsuleTitle == title+detailKey) {
 			return
 		}
 	}
 	lastAppliedCapsuleAction = action
-	lastAppliedCapsuleTitle = title
+	lastAppliedCapsuleTitle = title + detailKey
 	lastGlowPID = curPID
 
 	thawAppProcess()
-	cmd := exec.Command("/system/bin/sh", "-c", `/system/bin/am start -f 0x18000000 -n com.agent.mobileuse/.QuestionActivity --es capsule_action "$CAPSULE_ACTION" --es session_id "$CAPSULE_SID" --es session_title "$CAPSULE_TITLE" 2>/dev/null`)
-	cmd.Env = append(os.Environ(),
-		"CAPSULE_ACTION="+action,
-		"CAPSULE_SID="+sid,
-		"CAPSULE_TITLE="+title,
-	)
+	if action == "STOP" {
+		_ = exec.Command("/system/bin/am", "stopservice", "-n", "com.agent.mobileuse/.GlowService").Run()
+		return
+	}
+	cmd := exec.Command("/system/bin/am", "start-foreground-service", "-n", "com.agent.mobileuse/.GlowService", "-a", action,
+		"--es", "session_id", sid, "--es", "session_title", title,
+		"--es", "live_detail", live.Detail, "--es", "turn_id", live.TurnID, "--ei", "total", strconv.Itoa(live.Total), "--ei", "completed", strconv.Itoa(live.Completed))
+	cmd.Args = append(cmd.Args, "--es", "display_backend", live.DisplayBackend)
 	_ = cmd.Run()
 }
 
 func cancelQuestionOnDevice(reqID string) {
 	thawAppProcess()
-	exec.Command("/system/bin/sh", "-c", `/system/bin/am start -f 0x18000000 -n com.agent.mobileuse/.QuestionActivity --ez cancel_question true --es request_id "`+reqID+`" 2>/dev/null`).Run()
+	exec.Command("/system/bin/am", "broadcast", "-n", "com.agent.mobileuse/.NotifyReceiver", "-a", "com.agent.mobileuse.ACTION_QUESTION_CANCEL", "--es", "request_id", reqID).Run()
 }
 
 func clearCompletedOnDevice() {
 	thawAppProcess()
-	exec.Command("/system/bin/sh", "-c", `/system/bin/am start -f 0x18000000 -n com.agent.mobileuse/.QuestionActivity --ez clear_completed true 2>/dev/null`).Run()
+	exec.Command("/system/bin/am", "broadcast", "-n", "com.agent.mobileuse/.NotifyReceiver", "-a", "com.agent.mobileuse.ACTION_CLEAR").Run()
 }
 
 func startCapsuleWatchdog() {
@@ -747,6 +768,9 @@ func switchModeWithMigration(target string) map[string]interface{} {
 		if st.Status != "running" || vdDid <= 0 {
 			st = startVirtualDisplay()
 			vdDid = st.DisplayID
+			if st.Status != "running" || vdDid <= 0 {
+				return map[string]interface{}{"success": false, "message": "Virtual display failed to start"}
+			}
 		}
 	}
 
@@ -1524,6 +1548,7 @@ func syncA11yWithTargetDisplay(targetDid int) {
 		}()
 	} else {
 		ensureA11yServiceDetached()
+		unmuteAllAudio()
 		globalDumpDaemon.Stop()
 	}
 }
@@ -1926,6 +1951,9 @@ type CompositeActionRequest struct {
 }
 
 func main() {
+	if err := initGatewayAuth(); err != nil {
+		log.Fatal("gateway authorization initialization failed")
+	}
 	thawAppProcess()
 	initDshSecret()
 	startCapsuleWatchdog()
@@ -1941,11 +1969,13 @@ func main() {
 	go func() {
 		<-sigCh
 		ensureA11yServiceDetached()
+		unmuteAllAudio()
 		globalDumpDaemon.Stop()
 		os.Exit(0)
 	}()
 
 	mux := http.NewServeMux()
+	registerLiveRoutes(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2000,7 +2030,11 @@ func main() {
 			}
 		}
 
-		json.NewEncoder(w).Encode(startVirtualDisplay(opt))
+		started := startVirtualDisplay(opt)
+		if started.Status != "running" {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		json.NewEncoder(w).Encode(started)
 	})
 
 	mux.HandleFunc("/api/stop", func(w http.ResponseWriter, r *http.Request) {
@@ -2054,7 +2088,9 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "width": reqW, "height": reqH, "dpi": reqDpi})
+		actual := getStatus()
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "width": actual.Width, "height": actual.Height, "dpi": actual.DPI,
+			"requested_width": reqW, "requested_height": reqH})
 	})
 
 	mux.HandleFunc("/api/mode", func(w http.ResponseWriter, r *http.Request) {
@@ -2509,7 +2545,7 @@ func main() {
 
 		out, err := runTool(args...)
 		trimmed := strings.TrimSpace(out)
-		if err != nil && trimmed == "" {
+		if err != nil || strings.HasPrefix(trimmed, "fail error=") || trimmed == "" {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(ActionResponse{
 				Success: false,
@@ -2531,110 +2567,7 @@ func main() {
 		})
 	})
 
-	mux.HandleFunc("/api/notify", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		var p struct {
-			Title        string `json:"title"`
-			SessionTitle string `json:"session_title"`
-			Subtext      string `json:"subtext"`
-			Content      string `json:"content"`
-			Tag          string `json:"tag"`
-			URL          string `json:"url"`
-			SessionID    string `json:"session_id"`
-			Session      string `json:"session"`
-			Total        int    `json:"total"`
-			Completed    int    `json:"completed"`
-			IsCompleted  bool   `json:"is_completed"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(ActionResponse{Success: false, Message: "Invalid parameters"})
-			return
-		}
-		if p.Tag == "" {
-			p.Tag = "dsh_agent"
-		}
-		if p.Title == "" {
-			p.Title = "任务已经完成！"
-		}
-		if p.URL == "" {
-			p.URL = "http://127.0.0.1:3080"
-		}
-		sid := p.SessionID
-		if sid == "" {
-			sid = p.Session
-		}
-
-		sessionTitle := p.SessionTitle
-		if sessionTitle == "" {
-			sessionTitle = p.Subtext
-		}
-		if sessionTitle == "" {
-			_, title := getSessionMeta()
-			sessionTitle = title
-		}
-
-		isCompletedStr := "false"
-		if p.IsCompleted || (p.Total > 0 && p.Completed >= p.Total) {
-			isCompletedStr = "true"
-			setSessionActive(false, sid, sessionTitle)
-			if sid != "" {
-				lastCompletedSessionIDMu.Lock()
-				lastCompletedSessionID = sid
-				lastCompletedSessionIDMu.Unlock()
-			}
-			if p.Title == "" {
-				p.Title = "已完成"
-			}
-
-			// Context Suppression Check:
-			// If DemoDialogActivity is in foreground on Display 0 AND viewing this exact session:
-			// Silently suppress notification so as not to obstruct the user's view!
-			viewStateMu.Lock()
-			fg := isOverlayForeground
-			viewing := currentViewingSessionID
-			viewStateMu.Unlock()
-
-			if fg && viewing != "" && sid != "" && viewing == sid {
-				// Double-check with dumpsys that DemoDialogActivity is truly resumed
-				out, err := exec.Command("/system/bin/sh", "-c", `dumpsys activity activities | grep "topResumedActivity" | head -1`).Output()
-				if err == nil && strings.Contains(string(out), "DemoDialogActivity") {
-					fmt.Printf("[notify] User is actively viewing completed session %s in foreground. Suppressing completion notification.\n", sid)
-					json.NewEncoder(w).Encode(ActionResponse{Success: true, Message: "Suppressed: user is currently viewing this session in foreground"})
-					return
-				}
-			}
-		}
-
-		// Ensure app process is unfrozen from ColorOS Hans/Freezer and AMS BroadcastQueue
-		thawAppProcess()
-
-		// Direct Activity wake-up trampoline: am start -f 0x18000000
-		// Immediately unfreezes process in 0ms, posts notification, and finishes cleanly without delay
-		cmd := exec.Command("/system/bin/sh", "-c", `/system/bin/am start -f 0x18000000 -n com.agent.mobileuse/.QuestionActivity --ez only_notify true --ez is_completed "$NOTIFY_IS_COMPLETED" --es title "$NOTIFY_TITLE" --es session_title "$NOTIFY_SESSION_TITLE" --es subtext "$NOTIFY_SUBTEXT" --es tag "$NOTIFY_TAG" --es content "$NOTIFY_CONTENT" --es session_id "$NOTIFY_SESSION_ID" 2>/dev/null`)
-		cmd.Env = append(os.Environ(),
-			"NOTIFY_TITLE="+p.Title,
-			"NOTIFY_SESSION_TITLE="+sessionTitle,
-			"NOTIFY_SUBTEXT="+sessionTitle,
-			"NOTIFY_TAG="+p.Tag,
-			"NOTIFY_CONTENT="+p.Content,
-			"NOTIFY_SESSION_ID="+sid,
-			"NOTIFY_IS_COMPLETED="+isCompletedStr,
-		)
-		out, err := cmd.CombinedOutput()
-		if isCompletedStr == "true" && getSessionActive() {
-			go updateCapsuleState()
-		}
-		// No fallback: a failed notification must surface as a failure, not be
-		// silently masked by a degraded cmd-notification path. Report the real
-		// error so the cause can be investigated instead of hidden.
-		if err != nil {
-			json.NewEncoder(w).Encode(ActionResponse{Success: false, Message: err.Error(), Data: string(out)})
-			return
-		}
-		json.NewEncoder(w).Encode(ActionResponse{Success: true, Message: string(out)})
-	})
+	mux.HandleFunc("/api/notify", handleManualNotice)
 
 	mux.HandleFunc("/api/question", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -2645,6 +2578,7 @@ func main() {
 		var p struct {
 			RequestID string `json:"request_id"`
 			SessionID string `json:"session_id"`
+			TurnID    string `json:"turn_id"`
 			Questions []any  `json:"questions"`
 		}
 		bodyBytes, err := io.ReadAll(r.Body)
@@ -2659,27 +2593,29 @@ func main() {
 			return
 		}
 
+		// The live capsule already owns this turn's waiting notification.
+		// Avoid a second focus notification racing its asynchronous service start.
+		if p.TurnID != "" {
+			if !liveTasks.isWaiting(p.SessionID, p.TurnID) {
+				http.Error(w, "waiting turn unavailable", http.StatusConflict)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"success": true, "notification": "live_capsule"})
+			return
+		}
 		thawAppProcess()
 		st := getStatus()
 		sid := p.SessionID
 		if sid == "" {
-			_, sid = getSessionMeta()
+			sid, _ = getSessionMeta()
 		}
 
-		if st.Mode == "foreground" {
-			// In foreground mode: immediately launch DemoDialogActivity to present the question card to the user on screen
-			cmd := exec.Command("/system/bin/sh", "-c", `/system/bin/am start -n com.agent.mobileuse/.DemoDialogActivity --es session_id "$TARGET_SID" 2>/dev/null`)
-			cmd.Env = append(os.Environ(), "TARGET_SID="+sid)
-			_ = cmd.Run()
-		} else {
-			// In background / idle mode: post notification with direct action to open DemoDialogActivity
-			cmd := exec.Command("/system/bin/sh", "-c", `/system/bin/am start -f 0x18000000 -n com.agent.mobileuse/.QuestionActivity --es request_id "$REQ_ID" --es session_id "$REQ_SID" --es data "$REQ_DATA" 2>/dev/null`)
-			cmd.Env = append(os.Environ(),
-				"REQ_ID="+p.RequestID,
-				"REQ_SID="+sid,
-				"REQ_DATA="+string(bodyBytes),
-			)
-			_ = cmd.Run()
+		_ = st
+		cmd := exec.Command("/system/bin/am", "broadcast", "-n", "com.agent.mobileuse/.NotifyReceiver", "-a", "com.agent.mobileuse.ACTION_LIVE_QUESTION",
+			"--es", "request_id", p.RequestID, "--es", "session_id", sid, "--es", "data", string(bodyBytes))
+		if err := cmd.Run(); err != nil {
+			json.NewEncoder(w).Encode(ActionResponse{Success: false, Message: "Question delivery failed"})
+			return
 		}
 
 		json.NewEncoder(w).Encode(ActionResponse{Success: true, Message: "Question presented on device"})
@@ -2854,7 +2790,7 @@ func main() {
 		host = "127.0.0.1"
 	}
 	fmt.Printf("[AgentVD-Web-Go] Listening on %s:%s\n", host, port)
-	if err := http.ListenAndServe(host+":"+port, mux); err != nil {
+	if err := http.ListenAndServe(host+":"+port, protectGateway(mux)); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 	}
 }

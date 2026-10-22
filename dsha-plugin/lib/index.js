@@ -8,52 +8,35 @@
  *   - dsh-mobile-use（本项目 :3070）：KernelSU/LSPosed 模块提供的
  *     DisplayManager 真虚拟屏 + SystemUI hook + HyperOS 超级岛通知。
  *
- * 本插件只做 MCP stdio 桥接，所有真实动作都发给 3070；3070 只监听回环，
- * 插件不引入任何额外鉴权或网络暴露。
+ * MCP stdio 桥接与宿主生命周期事件共用回环网关，读取应用私有 token。
  */
 import * as McpClient from '@deepseek-ai/dsh-mcp-client';
 import { fileURLToPath } from 'node:url';
+import { installLifecycle } from './lifecycle.js';
 
 export const name = 'dsh-mobile-use';
 export const inject = ['tools'];
 
 const PROMPT = [
-  '【移动端虚拟屏与超级岛 · dsh-mobile-use】本机已装 agent-mobile-use（KernelSU/LSPosed 模块），',
-  '它提供独立虚拟屏 + HyperOS 超级岛通知，工具名是 mcp__mobile-use__mobile_*。',
-  '',
-  '■ 什么时候用它，而不是 dsha-android（:3090 无障碍主屏）：',
-  '  - 需要在后台跑手机任务、不打断用户当前屏幕时：用本插件的虚拟屏（background）。',
-  '  - 只需要在主屏点一下、看当前界面时：用 dsha-android 的 /app/ui/* 更省事。',
-  '  - 用户要求“任务进度/完成提醒上岛”“在状态栏看到你在干活”时：必须用本插件的 mobile_notify / mobile_question。',
-  '',
-  '■ 标准顺序：',
-  '  1) mobile_status 先看状态；stopped 就先 mobile_start（创建虚拟屏）。',
-  '  2) mobile_mode：foreground=用户主屏，background=虚拟屏（会把当前任务迁过去）。',
-  '     截图/读屏之前必须切到非 idle，idle 模式截图会 404。',
-  '  3) mobile_ui_dump 读当前界面 → 决定动作 → mobile_action（click/swipe/set_value/key/launch_app/wait）→ 再 dump 验证。',
-  '  4) 进度与完成：mobile_notify（title/session_title/content/session_id，完成时 is_completed=true）→ 手机上出现超级岛/完成通知。',
-  '  5) 需要用户拍板：mobile_question（questions=[{header,question}]）→ 用户从岛/通知进 App 回答；回答不经网关回传，',
-  '     所以提问后要告诉用户“请在手机上回答”。',
-  '  6) 收尾：mobile_stop 关虚拟屏。',
-  '',
-  '■ 超级岛的前置条件（重要）：',
-  '  - 需要在手机桌面 App「Agent Mobile Use → 控制台」里打开「超级岛通知（HyperOS）」开关；',
-  '  - 没打开时 mobile_notify 仍会成功，但只是普通通知、不出岛；不要反复重试工具，直接告诉用户去控制台打开该开关；',
-  '  - 超级岛依赖 HyperOS 的焦点通知校验，本模块已用 LSPosed hook 放行；若岛不出现，先让用户确认开关状态。',
-  '',
-  '■ 边界：',
-  '  - 3070 只监听回环且无鉴权，禁止把它暴露到局域网；',
-  '  - 动作要基于最近一次 dump 的坐标，别凭记忆连点；',
-  '  - 与用户交流一律用中文。',
+  '【手机 Agent · 实况通知】dsh-mobile-use 提供 KernelSU 虚拟屏工具，3070 网关需要私有 token。',
+  '任务开始、主屏控制、后台副屏、等待用户、完成、失败和停止会由真实任务事件自动更新超级岛。',
+  '正常完成以 turn/end completed 为准；工具调用或子步骤结束不表示任务完成。无需手工发送完成提醒。',
+  '先 mobile_status；后台操作用 mobile_start → mobile_mode(background) → mobile_ui_dump/mobile_screenshot → mobile_action。',
+  '前台操作可使用 DSHA 的 dsha-android；它操作用户主屏。DSHA App 侧虚拟屏与 root 虚拟屏是两个后端，不混用帧和坐标。',
+  '操作前后读取最新界面；切换、缩放或旋转后重新读屏；动作失败不自动换通道重放。',
+  'mobile_notify 只用于补充用户可见进度，total/completed 必须来自真实任务清单，不能编造百分比。',
+  '交互提问使用宿主 ask_user_question；插件自动转为等待回答岛，并在真实回答后恢复。mobile_question 仅投递问题通知。',
+  '用户从岛请求停止后要取消当前任务；已提交的外部操作可能已经发生，先核对实际状态。',
+  '结束屏幕使用后 mobile_mode(idle)，不用虚拟屏时 mobile_stop。超级岛开关关闭时保留普通通知，不反复重试。',
 ].join('\n');
-
 export async function apply(ctx) {
+  installLifecycle(ctx);
   const config = McpClient.Config({
     transport: 'stdio',
     serverName: 'mobile-use',
     command: process.execPath,
     args: [fileURLToPath(new URL('./server.cjs', import.meta.url))],
-    failOnStartupError: true,
+    failOnStartupError: false,
     toolCallTimeoutMs: 180000,
     reconnect: { enabled: false },
   });
