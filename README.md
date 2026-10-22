@@ -4,7 +4,15 @@
 
 DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、读屏和操作。任务进行、前台控制、后台副屏、等待回答、完成、失败和停止等状态会同步到超级岛，手机上可以查看进展、进入 DSHA 或停止任务。
 
-[下载 v0.10.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.10.md) · [English](#english)
+[下载 v0.10.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) · [交给 Agent 安装](#复制给-agent-一键安装) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.10.md) · [English](#english)
+
+## 复制给 Agent 一键安装
+
+点击代码框右上角的复制按钮，把下面这段话发给能连接手机的 Agent。手机连接、系统授权与重启按 Agent 提示完成。
+
+```text
+请帮我安装 Agent Mobile Use，让 DSHA 使用 Root 后台虚拟副屏并适配小米超级岛。项目：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos 。先阅读 README 和 Releases，检查手机的 Root、KernelSU、LSPosed 与 DSHA 环境，再下载配套模块和插件、校验 SHA-256，保留现有数据和设置，按文档完成安装与配置。需要连接手机、手动授权或重启时提示我；签名冲突时保留现场并报告。完成后调用 mobile_status，并执行一次只读副屏任务验证，结束时切回 idle 并回收副屏。
+```
 
 ![DSHA Root 副屏与超级岛真机展示](docs/images/v0.10/showcase.png)
 
