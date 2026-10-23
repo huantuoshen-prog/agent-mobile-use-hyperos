@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.agent.mobileuse"
-    android:versionCode="1000"
-    android:versionName="0.10.0-alpha">
+    android:versionCode="1100"
+    android:versionName="0.11.0-alpha">
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -26,6 +26,11 @@
             android:name="com.agent.mobileuse.GlowService"
             android:permission="android.permission.DUMP"
             android:exported="true" />
+
+        <activity android:name=".InstallActivity" android:exported="false" android:theme="@android:style/Theme.DeviceDefault" />
+        <activity android:name=".AnswerActivity" android:exported="false"
+            android:excludeFromRecents="true" android:theme="@android:style/Theme.DeviceDefault.Dialog" />
+        <receiver android:name=".AnswerReceiver" android:exported="false" />
 
         <activity
             android:name=".QuestionActivity"

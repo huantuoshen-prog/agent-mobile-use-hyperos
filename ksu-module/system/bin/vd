@@ -42,6 +42,9 @@ ensure_server() {
 }
 
 case "$1" in
+    doctor)
+        exec "$SERVER_BIN" --doctor
+        ;;
     start)
         ensure_server
         curl -s -X POST "$BASE_URL/api/start"

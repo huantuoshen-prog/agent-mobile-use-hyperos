@@ -95,6 +95,28 @@ public final class IslandPayloadBuilder {
                 title, content, 1, 600, picKey, false, null, null, actions);
     }
 
+    /** Component 4 text buttons; component 1 title actions only renders one. */
+    public static String answerQuestion(int protocol, String title, String text, String[] labels) {
+        try {
+            JSONObject root = new JSONObject(question(protocol, title, text, PIC_QUESTION, null));
+            JSONObject v2 = root.getJSONObject("param_v2");
+            v2.remove("baseInfo");
+            JSONObject info = new JSONObject();
+            info.put("title", cut(title, 24));
+            info.put("content", cut(text, 160));
+            info.put("animIconInfo", new JSONObject().put("src", PIC_KEY_PREFIX + PIC_QUESTION));
+            v2.put("iconTextInfo", info);
+            JSONArray buttons = new JSONArray();
+            for (int i = 0; i < Math.min(2, labels.length); i++) {
+                buttons.put(new JSONObject().put("type", 1).put("actionTitle", labels[i])
+                    .put("action", ACTION_KEY_PREFIX + "answer_" + i));
+            }
+            v2.put("textButton", buttons);
+            String result = root.toString();
+            return utf8Length(result) <= PARAM_MAX_BYTES ? result : null;
+        } catch (Exception e) { return null; }
+    }
+
     /** Interactive question island. */
     public static String question(int protocol, String title, String question,
                                   String picKey, ActionRef[] actions) {

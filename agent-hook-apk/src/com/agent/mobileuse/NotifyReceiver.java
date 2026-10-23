@@ -66,21 +66,12 @@ public class NotifyReceiver extends BroadcastReceiver {
         }
         if (ACTION_LIVE_QUESTION.equals(action)) {
             String requestId = intent.getStringExtra("request_id");
-            context.getSharedPreferences("agent_question_state", Context.MODE_PRIVATE).edit().putString("request_id", requestId).apply();
-            android.content.SharedPreferences live = context.getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
-            if ("WAITING".equals(live.getString("mode", "")) && live.getString("session_id", "").equals(intent.getStringExtra("session_id"))) {
-                try {
-                    org.json.JSONArray questions = new org.json.JSONObject(intent.getStringExtra("data")).optJSONArray("questions");
-                    if (questions != null && questions.length() > 0) {
-                        String text = questions.getJSONObject(0).optString("question", "等待你的回答");
-                        live.edit().putString("live_detail", text).apply();
-                        Intent update = new Intent(context, GlowService.class).setAction("START_WAITING");
-                        update.putExtra("session_id", intent.getStringExtra("session_id"));
-                        update.putExtra("session_title", live.getString("session_title", "手机 Agent"));
-                        if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(update); else context.startService(update);
-                        return;
-                    }
-                } catch (Throwable ignored) {}
+            QuestionBridge.store(context, intent);
+            if (intent.getStringExtra("turn_id") != null && !intent.getStringExtra("turn_id").isEmpty()) {
+                // Only lifecycle events own the task phase/identity. A delayed
+                // question broadcast must not resurrect a completed waiting task.
+                QuestionBridge.refresh(context);
+                return;
             }
             QuestionActivity.showQuestionNotification(context, nm, requestId, intent.getStringExtra("session_id"), intent.getStringExtra("data"));
             return;
@@ -89,7 +80,8 @@ public class NotifyReceiver extends BroadcastReceiver {
             android.content.SharedPreferences prefs = context.getSharedPreferences("agent_question_state", Context.MODE_PRIVATE);
             if (prefs.getString("request_id", "").equals(intent.getStringExtra("request_id"))) {
                 nm.cancel(QuestionActivity.NOTIFICATION_ID);
-                prefs.edit().remove("request_id").apply();
+                prefs.edit().remove("request_id").remove("data").remove("feedback").apply();
+                QuestionBridge.refresh(context);
             }
             return;
         }

@@ -1,59 +1,34 @@
-# DSHA 对接：把 3070 网关接进 DSHA 的 DSH 会话
+# DSHA 接入与本机网关
 
-DSHA（`com.dsh.client`）是 Android 上的 DSH 宿主，内部跑一个 DSH Web 运行时（guest rootfs + proot），
-自带 App 桥 `127.0.0.1:3090` 和两套设备能力：`dsha-android`（无障碍操作主屏）与
-`dsha-vscreen`（App 侧虚拟屏）。本项目提供的是另一条通路：KernelSU/LSPosed 模块 +
-`vd_server` 根虚拟屏 + HyperOS 超级岛，监听 `127.0.0.1:3070`。
+本项目面向使用 DSHA、KernelSU/LSPosed 的小米 Root 手机。模块提供后台虚拟副屏和超级岛任务通知，插件将本机网关注册为普通 MCP tools。
 
-本目录下的 `dsha-plugin/` 就是连接两边的插件：一个 Cordis 插件 + MCP stdio server，
-把 3070 的能力注册成 DSH 工具（`mcp__mobile-use__*`）。
+| 通路 | 能力 | 地址 |
+| --- | --- | --- |
+| DSHA dsha-android | 无障碍操作主屏 | 127.0.0.1:3090 |
+| DSHA dsha-vscreen | 宿主 App 自带虚拟屏 | 127.0.0.1:3090 |
+| 本项目 dsh-mobile-use | Root 虚拟屏、实况通知、超级岛 | 127.0.0.1:3070 |
 
-## 为什么是普通 tools，而不是 computer-use provider
+DSH 0.2.0-rc.2 的 computer-use registry 只允许一个 provider，DSHA 已占用该位置。本项目注册普通工具，保持独立的屏幕状态、截图和坐标。
 
-`@deepseek-ai/dsh-computer-use@0.2.0-rc.2` 的 `ComputerUseRegistry.register(name)`
-在同一进程只允许一个 provider（重复注册抛
-`computer use provider "<name>" is already registered`）。DSHA 内置的
-`dsh-computer-use-android` 已占用该位置，因此 `dsh-mobile-use` 只注册普通 `tools`，
-与内置能力平行存在、互不替换。
+## 版本与安装
 
-## 两条通路怎么选
+已发布版为模块 0.10.0-alpha + 插件 0.3.0。当前源码准备模块 0.11.0-alpha + 插件 0.4.0，新增功能尚待真机验收。安装包以 [GitHub Releases](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases) 中的配套版本为准。
 
-| 场景 | 用哪条 |
-| --- | --- |
-| 让 Agent 操作手机主屏、不需要 root | `dsha-android`（:3090） |
-| 想在 App 内用 DSHA 自带实验虚拟屏 | `dsha-vscreen`（:3090） |
-| 想要与主屏完全隔离的 root 虚拟屏、后台跑任务 | `dsh-mobile-use`（:3070） |
-| 想要 HyperOS 超级岛提示（胶囊/完成/提问） | `dsh-mobile-use`（:3070） |
+1. 在 KernelSU 安装模块，核对 LSPosed 已启用本模块及其作用域，重启并首次解锁。
+2. 打开 DSHA，完成运行环境初始化。
+3. 在 DSHA 自带插件管理器导入配套 ZIP，按提示重启 Web。配置、启动快照和链接由插件管理器维护。
+4. 调用 mobile_status，执行只读后台副屏任务，结束后 mobile_mode(idle)、mobile_stop。
 
-## 安装与验证
+0.11 候选版增加控制台“安装检查”和 mobile_diagnose 工具。DSHA 在模块启动后才初始化时，可点击“修复 DSHA 连接”重新交付凭据，然后重启 Web。更新采用手动检查、下载校验和管理器安装。
 
-见 [`dsha-plugin/README.md`](../dsha-plugin/README.md)。要点：
+## 鉴权与问答
 
-1. 设备上 3070 网关可用（KernelSU 模块已启用）。
-2. `dsha-plugin import <zip>`（或手工放入 guest `/root/dsh-mobile-use` 并写 profile）。
-3. 重启 DSHA Web（App 内点「进入对话」）。
-4. 会话里调用 `mcp__mobile-use__mobile_status` 确认工具已加载。
+除只读 GET /api/status 外，3070 接口需要 Bearer token 或受控 WebView 的 HttpOnly cookie。网关只监听回环。模块将凭据交付至控制台私有文件和 DSHA guest /root/.dsh/mobile-use-token；0.11 候选版根据 DSHA 数据位置记录选择实际数据目录，兼容旧 rootfs 和独立持久目录；目录冲突或记录无效会显示待处理。插件支持 MOBILE_USE_TOKEN_FILE，不使用模型 API key。
 
-## 已验证与未验证
+实况事件绑定 session_id、turn_id、sequence。问答再绑定 request_id，按钮再绑定题目 ID。旧轮次与重复提交受到校验。
 
-已验证（Windows 侧、对真机网关）：
+0.10 同步提问等待状态，答案通过 DSHA 原有界面提交。0.11 候选版通过 user-questions/request waterfall 返回真实答案：简短二选一可在展开超级岛后回答，多题逐题选择；更多选项、多选、长说明及自定义回答打开模块面板。原 DSHA 界面仍能回答，实际胜出的答案会被记录。
 
-- MCP stdio 握手：`initialize` 返回 `serverInfo dsh-mobile-use/0.1.0`
-- `tools/list` 返回 11 个工具
-- `mobile_status` 返回真实状态 JSON；`mobile_ui_dump` 返回控件树；
-  `mobile_screenshot` 返回 JPEG（MCP image content）
-- 参数校验：非法 mode/多余参数/缺必填均以 `isError` 拒绝
-- 插件目录、`cordis.patch.yml`、profile/启动快照写入格式与 DSHA 内置插件一致
+真正让 Agent 等待用户应调用宿主 ask_user_question。mobile_question 只投递通知。带 intent 的审核问题和超时后的 continued 问题保留 DSHA 原生处理路径。
 
-未验证：
-
-- DSHA Web 重启后的「注册插件 / 加载」阶段（设备当时处于锁屏，无法在 App 内点「进入对话」）
-- 在 DSHA 会话里真实调用 11 个工具
-
-## 边界
-
-- 3070 无鉴权、只监听回环：插件不改变这一点，也不应把 3070 暴露到 LAN。
-- root 虚拟屏需要模块正常加载；`system_server` 的 wm/IME hook 在 HyperOS 4 上
-  仍有 `ClassNotFoundException`（不阻塞虚拟屏的现有能力），详见
-  [hyperos.md](hyperos.md)。
-- 提问回答不经 3070 回传：`/api/question` 只负责把问题投到设备。
+源码依据、接口和待验收项目见 [0.11 开发记录](live-agent-0.11.md)。[0.10 历史验收](live-agent-0.10.md) 不代表新增桥接已经通过设备测试。

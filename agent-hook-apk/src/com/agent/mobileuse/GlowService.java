@@ -347,7 +347,10 @@ public class GlowService extends Service {
             // HyperOS / MIUI focus-notification super island (opt-in, no-op elsewhere).
             HyperIsland.addLiveActions(this, builder, capsuleIcon);
             boolean virtualDisplayRunning = "BACKGROUND".equals(mode);
-            HyperIsland.attachCapsule(this, builder, capsuleTitle, displayTitle, bigText,
+            boolean questionAttached = "WAITING".equals(mode) && HyperIsland.isIslandActive(this)
+                && QuestionBridge.attach(this, builder, iconBitmap, sid == null ? "" : sid,
+                    getSharedPreferences("agent_capsule_state", 0).getString("turn_id", ""));
+            if (!questionAttached) HyperIsland.attachCapsule(this, builder, capsuleTitle, displayTitle, bigText,
                     iconBitmap, virtualDisplayRunning);
 
             startForeground(NOTIFICATION_ID, builder.build());
@@ -421,7 +424,7 @@ public class GlowService extends Service {
         } else if ("START_WAITING".equals(action)) {
             hideGlow();
             promoteToForeground("WAITING", sid, title);
-        } else if ("REFRESH".equals(action)) {
+        } else if ("REFRESH".equals(action) || "REFRESH_QUESTION".equals(action)) {
             try {
                 android.content.SharedPreferences sp = getSharedPreferences("agent_capsule_state", Context.MODE_PRIVATE);
                 String savedMode = sp.getString("mode", "");
@@ -429,11 +432,13 @@ public class GlowService extends Service {
                     String savedSid = sp.getString("session_id", "");
                     String savedTitle = sp.getString("session_title", "");
                     // Explicitly tear down existing notification to detach SystemUI punch-hole capsule
-                    stopForeground(true);
-                    try {
-                        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                        if (nm != null) nm.cancel(NOTIFICATION_ID);
-                    } catch (Throwable ignored) {}
+                    if ("REFRESH".equals(action)) {
+                        stopForeground(true);
+                        try {
+                            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                            if (nm != null) nm.cancel(NOTIFICATION_ID);
+                        } catch (Throwable ignored) {}
+                    }
                     promoteToForeground(savedMode, savedSid, savedTitle);
                 }
                 else { stopSelf(); return START_NOT_STICKY; }

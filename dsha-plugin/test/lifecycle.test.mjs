@@ -69,6 +69,32 @@ test('DSHA 两套屏幕后端识别独立', () => {
   assert.equal(classifyTool('read_file'), 'running');
 });
 
+test('真实提问中间件经桥接返回答案并恢复后台阶段', async () => {
+  const handlers = new Map(), sent = [];
+  const session = { id: 's' }, agent = { session }, parent = new AbortController();
+  const answer = { answers: [{ id:'question-1', selected:['继续'] }] };
+  const ctx = { on(name, fn) { handlers.set(name, fn); } };
+  const live = installLifecycle(ctx, { intervalMs:60000, post:async(route,body)=>{
+    sent.push({route,body});
+    if(route==='/api/question')return {bridge:true};
+    if(route.startsWith('/api/question?'))return {state:'submitted',...answer};
+    return {};
+  }});
+  try {
+    handlers.get('agent/status')({agent,status:'running'});
+    handlers.get('session/event')(session,{type:'tool/call',data:{name:'mcp__mobile-use__mobile_mode',arguments:{mode:'background'}}});
+    const request={agent,signal:parent.signal,wait:{callId:'call-1',timed:true},questions:[{id:'question-1',question:'继续？',options:[{label:'继续'},{label:'停止'}]}]};
+    const result=await handlers.get('user-questions/request')(request,()=>new Promise(()=>{}));
+    assert.deepEqual(result,answer);
+    const registration=sent.find(x=>x.route==='/api/question').body;
+    const settlement=sent.find(x=>x.route==='/api/question/settle').body;
+    assert.equal(registration.call_id,'call-1');assert.equal(registration.session_id,'s');
+    for(const k of ['request_id','session_id','turn_id'])assert.equal(settlement[k],registration[k]);
+    assert.equal(settlement.answer_source,'island');assert.equal(parent.signal.aborted,false);
+    assert.equal(live.tasks.get('s').phase,'background');
+  } finally { live.dispose(); }
+});
+
 test('岛内停止使用宿主 cancel user，重复轮询不会重复取消', async () => {
   const handlers = new Map();let cancelled = 0, cause;
   const ctx = { on(name, fn) { handlers.set(name, fn); } };

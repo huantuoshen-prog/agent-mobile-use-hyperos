@@ -1,0 +1,3 @@
+75ac066b61c3913018a0680a2bad2191222ba15e86afa3093342a4aa4a51876d  agent-mobile-use-ksu-v0.11.0-alpha.zip
+d69d03650cfc682162817b5843eeabbff8edc2b81f46c59e4143e248ffa22386  dsh-mobile-use-0.4.0.zip
+cd690864f1de86fba581ed45edd4e9eca256e52e7fac998ad9afa3c028f3889e  live-agent-0.11.0-manifest.json

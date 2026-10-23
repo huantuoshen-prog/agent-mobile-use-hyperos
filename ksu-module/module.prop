@@ -1,6 +1,7 @@
 id=agent_mobile_use
 name=Agent Mobile Sandbox & Tools
-version=0.10.0-alpha
-versionCode=1000
+version=0.11.0-alpha
+versionCode=1100
 author=酸小明
 description=供 DeepSeek Harness 使用的 Mobile Use 工具。提供后台虚拟副屏与屏幕控制能力。
+updateJson=https://raw.githubusercontent.com/huantuoshen-prog/agent-mobile-use-hyperos/main/updates/alpha.json

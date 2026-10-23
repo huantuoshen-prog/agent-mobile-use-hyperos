@@ -14,9 +14,12 @@ cp "$WORKSPACE/vd-tool-java/bin/agent_tools.dex" "$SCRIPT_DIR/bin/agent_tools.de
 cp "$WORKSPACE/vd-tool-java/bin/agent_vd.dex" "$SCRIPT_DIR/bin/agent_vd.dex"
 
 # 3. Copy Hook APK
+[ -f "$WORKSPACE/agent-hook-apk/build/agent_hook.apk" ] || { echo "Signed APK missing"; exit 1; }
 if [ -f "$WORKSPACE/agent-hook-apk/build/agent_hook.apk" ]; then
     cp -f "$WORKSPACE/agent-hook-apk/build/agent_hook.apk" "$SCRIPT_DIR/apk/agent_hook.apk"
 fi
+
+(cd "$SCRIPT_DIR" && sha256sum apk/agent_hook.apk bin/vd_server bin/agent_tools.dex bin/agent_vd.dex > binaries.sha256)
 
 # 4. Create zip
 cd "$SCRIPT_DIR"

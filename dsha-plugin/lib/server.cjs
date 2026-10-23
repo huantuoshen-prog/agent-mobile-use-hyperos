@@ -19,6 +19,7 @@ const { request: gatewayRequest } = require('./gateway.cjs');
 const ACTIONS = ['observe', 'click', 'set_value', 'swipe', 'key', 'launch_app', 'wait'];
 
 const definitions = [
+  ['mobile_diagnose', '只读检查模块、DSHA插件、连接凭据与安装状态；不会操作手机屏幕。', {}],
   ['mobile_status', '读取网关与虚拟屏状态（模式、display_id、尺寸、会话、LSPosed 是否生效）。', {}],
   ['mobile_start', '创建/复用 root 虚拟屏并返回 display_id、尺寸、DPI。', { width: { type: 'integer', minimum: 16 }, height: { type: 'integer', minimum: 16 }, dpi: { type: 'integer', minimum: 1 }, orientation: { type: 'string', enum: ['portrait', 'landscape'] } }],
   ['mobile_stop', '关闭虚拟屏并回收。', {}],
@@ -154,6 +155,7 @@ async function call(name, args, options = {}) {
   if (options.signal?.aborted) throw options.signal.reason || bad('CANCELLED');
   if (name === 'mobile_screenshot') return screenshot(options);
 
+  if (name === 'mobile_diagnose') return readJson(await request(BASE + '/api/diagnostics'));
   if (name === 'mobile_status') return readJson(await request(BASE + '/api/status'));
   if (name === 'mobile_start') return readJson(await request(BASE + '/api/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) }));
   if (name === 'mobile_stop') return readJson(await request(BASE + '/api/stop', { method: 'POST' }));
@@ -260,7 +262,7 @@ function startServer() {
         result = {
           protocolVersion: params.protocolVersion || '2025-03-26',
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'dsh-mobile-use', version: '0.3.0' },
+          serverInfo: { name: 'dsh-mobile-use', version: require('./version.cjs').pluginVersion },
           instructions:
             '这些工具操作 agent-mobile-use 的 root 虚拟屏网关（127.0.0.1:3070）。顺序：mobile_start → mobile_mode(background) → mobile_ui_dump/mobile_screenshot → mobile_action。虚拟屏需要 KernelSU 模块；超级岛需要控制台开关。每次动作后重新读屏验证，别凭记忆连点。',
         };

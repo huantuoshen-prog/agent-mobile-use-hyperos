@@ -324,6 +324,9 @@ public class SettingsActivity extends Activity {
             }
         });
         headerContent.addView(btnRefresh);
+        Button install = createStyledButton("安装检查", "#162338", "#00A3C4");
+        install.setOnClickListener(v -> startActivity(new Intent(this, InstallActivity.class)));
+        headerContent.addView(install);
 
         header.addView(headerContent);
 

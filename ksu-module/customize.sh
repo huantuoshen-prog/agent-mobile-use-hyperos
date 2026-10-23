@@ -1,24 +1,31 @@
 SKIPUNZIP=0
 
+[ "$ARCH" = "arm64" ] || abort "当前发布包仅支持 ARM64。"
+[ "${KSU:-}" = "true" ] || abort "当前版本需要 KernelSU 模块环境。"
+[ -f /data/adb/lspd/config/modules_config.db ] || abort "请先安装并启用 LSPosed，再安装本模块。"
+[ -f "$MODPATH/binaries.sha256" ] || abort "发布包缺少构件校验文件。"
+(cd "$MODPATH" && sha256sum -c binaries.sha256) || abort "包内构件校验失败，安装已停止。"
+
+MODULE_VERSION=$(sed -n 's/^version=//p' "$MODPATH/module.prop" | tr -d '\r')
 ui_print "**********************************************"
-ui_print "* Agent Mobile Sandbox & Tools v0.10.0-alpha *"
+ui_print "* Agent Mobile Sandbox & Tools v$MODULE_VERSION *"
 ui_print "*               作者：酸小明                 *"
 ui_print "**********************************************"
 
-ui_print "- 正在安装 LSPosed 跨屏路由与输入法隔离补丁 (v0.10.0-alpha)..."
+ui_print "- 正在安装 LSPosed 跨屏路由与输入法隔离补丁 (v$MODULE_VERSION)..."
 ui_print "- 检测到 HyperOS/MIUI 时将启用超级岛(焦点通知)适配与 XMSF 校验解锁"
 NOTIFICATION_WAS_GRANTED=0
 if dumpsys package com.agent.mobileuse 2>/dev/null | grep -q 'android.permission.POST_NOTIFICATIONS: granted=true'; then
     NOTIFICATION_WAS_GRANTED=1
 fi
-pm install -r "$MODPATH/apk/agent_hook.apk" >/dev/null 2>&1
-if [ $? -eq 0 ]; then
+if PM_RESULT=$(pm install -r "$MODPATH/apk/agent_hook.apk" 2>&1); then
     ui_print "- Hook 补丁安装成功"
     pm grant com.agent.mobileuse android.permission.RECORD_AUDIO >/dev/null 2>&1
     if [ "$NOTIFICATION_WAS_GRANTED" = 1 ]; then
         pm grant com.agent.mobileuse android.permission.POST_NOTIFICATIONS >/dev/null 2>&1
     fi
 else
+    ui_print "$PM_RESULT"
     abort "APK 覆盖安装失败：请核对签名，模块安装已停止；未删除 App 数据。"
 fi
 
@@ -39,7 +46,13 @@ if [ -f "$LSP_DB" ] && [ -x "$SQLITE_BIN" ]; then
         "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.agent.mobileuse', 0);" 2>/dev/null
         # HyperOS/MIUI: XMSF verifies the focus-notification (super island) whitelist.
         "$SQLITE_BIN" "$LSP_DB" "INSERT OR IGNORE INTO scope (module_pkg_name, app_pkg_name, user_id) VALUES ('com.agent.mobileuse', 'com.xiaomi.xmsf', 0);" 2>/dev/null
-        ui_print "- LSPosed 作用域配置完成: $APK_PATH"
+        # Bundled sqlite executor has no result-row output. Check its exit code
+        # with a read-only conditional expression, including the enabled flag.
+        if "$SQLITE_BIN" "$LSP_DB" "PRAGMA query_only=ON; SELECT CASE WHEN EXISTS(SELECT 1 FROM modules_state WHERE module_pkg_name='com.agent.mobileuse' AND user_id=0 AND enabled=1) AND (SELECT count(DISTINCT app_pkg_name) FROM scope WHERE module_pkg_name='com.agent.mobileuse' AND user_id=0 AND app_pkg_name IN ('android','com.android.systemui','com.agent.mobileuse','com.xiaomi.xmsf'))=4 THEN 1 ELSE abs(-9223372036854775808) END;" >/dev/null 2>&1; then
+            ui_print "- LSPosed 必要作用域已配置。重启后在控制中心检查实际生效状态。"
+        else
+            ui_print "! LSPosed 自动配置未确认，请手动启用本模块并核对作用域。"
+        fi
     fi
 fi
 

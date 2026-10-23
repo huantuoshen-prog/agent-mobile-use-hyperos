@@ -40,11 +40,19 @@ func initGatewayAuth() error {
 	if len(gatewayToken) < 32 {
 		return fmt.Errorf("gateway token invalid")
 	}
+	deliverGatewayToken(b)
+	return nil
+}
+
+func deliverGatewayToken(b []byte) {
 	// 只把控制凭据放入两个受支持应用的私有目录，不写共享存储。
-	for _, item := range [][2]string{
+	targets := [][2]string{
 		{"/data/user/0/com.agent.mobileuse/files/gateway-token", "/data/user/0/com.agent.mobileuse"},
-		{"/data/user/0/com.dsh.client/files/linux/ubuntu/root/.dsh/mobile-use-token", "/data/user/0/com.dsh.client"},
-	} {
+	}
+	if path, err := dshaTokenPath(); err == nil {
+		targets = append(targets, [2]string{path, dshaAppDir})
+	}
+	for _, item := range targets {
 		st, e := os.Stat(item[1])
 		if e != nil {
 			continue
@@ -62,6 +70,9 @@ func initGatewayAuth() error {
 				continue
 			}
 			_ = os.Chown(dir, int(owner.Uid), int(owner.Gid))
+		}
+		if !privateDescendant(item[1], dir) {
+			continue
 		}
 		// root 创建的 files 目录缺少应用 MCS 分类，文件标签正确也无法穿越目录。
 		_ = exec.Command("/system/bin/restorecon", "-F", dir).Run()
@@ -91,7 +102,6 @@ func initGatewayAuth() error {
 			os.Remove(name)
 		}
 	}
-	return nil
 }
 
 func gatewayAuthorized(r *http.Request, token string) bool {

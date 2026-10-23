@@ -12,6 +12,9 @@
  */
 import * as McpClient from '@deepseek-ai/dsh-mcp-client';
 import { fileURLToPath } from 'node:url';
+import gateway from './gateway.cjs';
+import version from './version.cjs';
+import { randomUUID } from 'node:crypto';
 import { installLifecycle } from './lifecycle.js';
 
 export const name = 'dsh-mobile-use';
@@ -46,6 +49,15 @@ export async function apply(ctx) {
     yield child.dispose;
   }, 'dsh-mobile-use-tools');
   await child.await();
+  const instance = randomUUID(), post = gateway.client();
+  const register = () => {
+    const count = ctx.tools.schemas().filter(t => t.name.startsWith('mcp__mobile-use__')).length;
+    void post('/api/integration', { version: version.pluginVersion, instance_id: instance, tools_registered: count }).catch(() => {});
+  };
+  register();
+  const healthTimer = setInterval(register, 30000);
+  healthTimer.unref?.();
+  ctx.on('dispose', () => clearInterval(healthTimer));
 
   // 首选：系统提示注入（标准配置）。apply 完成条件由 loader 等待，所以放在 MCP 就绪之后。
   ctx.inject(['systemPrompt'], promptCtx => {

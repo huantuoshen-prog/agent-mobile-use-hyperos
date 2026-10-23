@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "protocol_version": 2,
+  "apk_certificate_sha256": "08d41bb220057ac14fdfed4f40d8ac94ff5e6f0d16699acd266e239517d63d67",
+  "module": {
+    "file": "agent-mobile-use-ksu-v0.11.0-alpha.zip",
+    "version": "0.11.0-alpha",
+    "sha256": "75ac066b61c3913018a0680a2bad2191222ba15e86afa3093342a4aa4a51876d",
+    "bytes": 5524774,
+    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/agent-mobile-use-ksu-v0.11.0-alpha.zip"
+  },
+  "plugin": {
+    "file": "dsh-mobile-use-0.4.0.zip",
+    "version": "0.4.0",
+    "sha256": "d69d03650cfc682162817b5843eeabbff8edc2b81f46c59e4143e248ffa22386",
+    "bytes": 17626,
+    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/dsh-mobile-use-0.4.0.zip"
+  },
+  "dsh_version": "0.2.0-rc.2"
+}

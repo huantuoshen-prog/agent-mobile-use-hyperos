@@ -34,7 +34,9 @@ jobs:
 
       - name: Check gateway and bridge
         run: |
-          node --test dsha-plugin/test/gateway.test.cjs dsha-plugin/test/lifecycle.test.mjs
+          python3 tools/sync-version.py
+          git diff --exit-code -- agent-hook-apk/AndroidManifest.xml agent-hook-apk/src/com/agent/mobileuse/ReleaseInfo.java ksu-module/module.prop dsha-plugin/package.json dsha-plugin/lib/version.cjs vd-server-go/version.go
+          node --test dsha-plugin/test/*.test.*
           cd vd-server-go && go test ./...
 
       # ubuntu-latest already ships an Android SDK at $ANDROID_HOME. Do not use
@@ -65,6 +67,8 @@ jobs:
           javac -encoding UTF-8 -cp "$CP" -d agent-hook-apk/build-ci/tests agent-hook-apk/test/*.java
           java -cp "agent-hook-apk/build-ci/tests:$CP" com.agent.mobileuse.IslandPayloadSelftest
           java -cp "agent-hook-apk/build-ci/tests:$CP" com.agent.mobileuse.AgentLiveSelftest
+          java -cp "agent-hook-apk/build-ci/tests:$CP" com.agent.mobileuse.QuestionPayloadSelftest
+          java -cp "agent-hook-apk/build-ci/tests:$CP" com.agent.mobileuse.ReleaseFileSelftest
 
       - name: Build runtime binaries from source
         run: bash tools/build-runtime-ci.sh
@@ -97,12 +101,19 @@ jobs:
           printf '%s' "$MODULE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
           chmod 600 "$KEYSTORE"
           "$SDK/build-tools/34.0.0/apksigner" sign --ks "$KEYSTORE" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD --out agent-hook-apk/build/agent_hook.apk agent-hook-apk/build/agent_hook-unsigned.apk
-          "$SDK/build-tools/34.0.0/apksigner" verify agent-hook-apk/build/agent_hook.apk
+          CERT=$("$SDK/build-tools/34.0.0/apksigner" verify --print-certs agent-hook-apk/build/agent_hook.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test "$CERT" = "$(tr -d '\r\n' < release-certificate.sha256)"
           echo 'configured=true' >> "$GITHUB_OUTPUT"
 
       - name: Pack signed module
         if: steps.signing.outputs.configured == 'true'
         run: bash ksu-module/pack.sh
+
+      - name: Package paired plugin and verify release assets
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          python3 tools/package-release.py --java "$JAVA_HOME/bin/java" --apksigner "$SDK/build-tools/34.0.0/lib/apksigner.jar" --apk agent-hook-apk/build/agent_hook.apk --staging-dir agent-hook-apk/build-ci/release-index
 
       - name: Upload signed artifacts
         if: steps.signing.outputs.configured == 'true'
@@ -110,6 +121,10 @@ jobs:
         with:
           name: signed-ksu-module
           path: |
-            release/agent-mobile-use-ksu-v0.10.0-alpha.zip
+            release/agent-mobile-use-ksu-v*.zip
+            release/dsh-mobile-use-*.zip
+            release/live-agent-*-manifest.json
+            release/SHA256SUMS-*.txt
+            agent-hook-apk/build-ci/release-index/alpha.json
             agent-hook-apk/build/agent_hook.apk
           retention-days: 30

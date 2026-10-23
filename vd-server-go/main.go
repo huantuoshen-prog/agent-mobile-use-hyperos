@@ -1951,6 +1951,10 @@ type CompositeActionRequest struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--doctor" {
+		json.NewEncoder(os.Stdout).Encode(diagnostics(false))
+		return
+	}
 	if err := initGatewayAuth(); err != nil {
 		log.Fatal("gateway authorization initialization failed")
 	}
@@ -1976,6 +1980,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerLiveRoutes(mux)
+	registerDiagnostics(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2569,72 +2574,7 @@ func main() {
 
 	mux.HandleFunc("/api/notify", handleManualNotice)
 
-	mux.HandleFunc("/api/question", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		if r.Method == "OPTIONS" {
-			return
-		}
-		var p struct {
-			RequestID string `json:"request_id"`
-			SessionID string `json:"session_id"`
-			TurnID    string `json:"turn_id"`
-			Questions []any  `json:"questions"`
-		}
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(ActionResponse{Success: false, Message: "Bad request"})
-			return
-		}
-		if err := json.Unmarshal(bodyBytes, &p); err != nil || p.RequestID == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(ActionResponse{Success: false, Message: "Invalid parameters"})
-			return
-		}
-
-		// The live capsule already owns this turn's waiting notification.
-		// Avoid a second focus notification racing its asynchronous service start.
-		if p.TurnID != "" {
-			if !liveTasks.isWaiting(p.SessionID, p.TurnID) {
-				http.Error(w, "waiting turn unavailable", http.StatusConflict)
-				return
-			}
-			json.NewEncoder(w).Encode(map[string]any{"success": true, "notification": "live_capsule"})
-			return
-		}
-		thawAppProcess()
-		st := getStatus()
-		sid := p.SessionID
-		if sid == "" {
-			sid, _ = getSessionMeta()
-		}
-
-		_ = st
-		cmd := exec.Command("/system/bin/am", "broadcast", "-n", "com.agent.mobileuse/.NotifyReceiver", "-a", "com.agent.mobileuse.ACTION_LIVE_QUESTION",
-			"--es", "request_id", p.RequestID, "--es", "session_id", sid, "--es", "data", string(bodyBytes))
-		if err := cmd.Run(); err != nil {
-			json.NewEncoder(w).Encode(ActionResponse{Success: false, Message: "Question delivery failed"})
-			return
-		}
-
-		json.NewEncoder(w).Encode(ActionResponse{Success: true, Message: "Question presented on device"})
-	})
-
-	mux.HandleFunc("/api/question/cancel", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		if r.Method == "OPTIONS" {
-			return
-		}
-		var p struct {
-			RequestID string `json:"request_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&p); err == nil && p.RequestID != "" {
-			cancelQuestionOnDevice(p.RequestID)
-		}
-		json.NewEncoder(w).Encode(ActionResponse{Success: true, Message: "Question cancelled"})
-	})
+	registerQuestionRoutes(mux)
 
 	mux.HandleFunc("/api/auth/secret", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

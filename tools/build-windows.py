@@ -17,6 +17,8 @@ for arg in ('jdk', 'build-tools', 'android-jar', 'go', 'keystore'):
     p.add_argument('--' + arg, required=True, type=Path)
 args = p.parse_args()
 root = Path(__file__).resolve().parents[1]
+cfg = json.loads((root / 'release-config.json').read_text())
+subprocess.run([__import__('sys').executable, str(root / 'tools/sync-version.py')], check=True)
 build = root / '.build-windows'
 if build.exists():
     assert build.resolve() == root.resolve() / '.build-windows'
@@ -76,13 +78,14 @@ for main, output in [('ToolMain', 'agent_tools.dex'), ('DaemonMain', 'agent_vd.d
 goenv = dict(os.environ, GOOS='linux', GOARCH='arm64', CGO_ENABLED='0')
 run(args.go, 'build', '-trimpath', '-o', build / 'vd_server', '.', cwd=root / 'vd-server-go', env=goenv)
 module = root / 'ksu-module'
-dest = root / 'release/agent-mobile-use-ksu-v0.10.0-alpha.zip'
+dest = root / ('release/agent-mobile-use-ksu-v' + cfg['moduleVersion'] + '.zip')
 dest.parent.mkdir(exist_ok=True)
 replacement = {'apk/agent_hook.apk': apk, 'bin/vd_server': build / 'vd_server',
                'bin/agent_tools.dex': build / 'agent_tools.dex', 'bin/agent_vd.dex': build / 'agent_vd.dex'}
 with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr('binaries.sha256', ''.join(hashlib.sha256(f.read_bytes()).hexdigest() + '  ' + name + '\n' for name, f in replacement.items()))
     for f in module.rglob('*'):
-        if not f.is_file() or f.name == 'pack.sh': continue
+        if not f.is_file() or f.name in ('pack.sh', 'binaries.sha256'): continue
         rel = f.relative_to(module).as_posix()
         data = replacement.get(rel, f).read_bytes()
         if f.suffix in ('.sh', '.prop') or rel == 'system/bin/vd': data = data.replace(b'\r\n', b'\n')

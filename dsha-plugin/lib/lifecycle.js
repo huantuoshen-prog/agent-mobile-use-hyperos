@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import gateway from './gateway.cjs';
+import { answerFromIsland } from './questions.js';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 export function classifyTool(name, args = {}, current = 'running') {
@@ -103,15 +104,24 @@ export function installLifecycle(ctx, { post = gateway.client(), now = Date.now,
     const session = request?.session || request?.agent?.session || { id: request?.agent?.id };
     const task = tasks.get(sessionId(session)) || begin(session);
     const requestId = uuid();
+    const key = { request_id: requestId, session_id: task?.id || '', turn_id: task?.turnId || '' };
     const previous = task?.phase || 'running';
+    let bridged = false;
     if (task) {
+      if (request?.agent) task.agent = request.agent;
       await report(task, 'waiting', '等待你的回答');
-      await post('/api/question', { request_id: requestId, session_id: task.id, turn_id: task.turnId, questions: request?.questions || [] }, { signal: controller.signal }).catch(() => {});
+      const questions = request?.questions || [];
+      const bridge = questions.length > 0 && questions.every(q => q.id && !q.intent);
+      const result = await post('/api/question', { ...key, call_id: request?.wait?.callId || '', bridge, questions }, { signal: controller.signal }).catch(() => null);
+      bridged = bridge && result?.bridge === true;
     }
-    try { return typeof next === 'function' ? await next() : undefined; }
+    try {
+      if (bridged && typeof next === 'function') return await answerFromIsland({ request, next, post, key, signal: controller.signal });
+      return typeof next === 'function' ? await next() : undefined;
+    }
     finally {
       if (task) {
-        await post('/api/question/cancel', { request_id: requestId }, { signal: controller.signal }).catch(() => {});
+        if (!bridged) await post('/api/question/cancel', key, { signal: controller.signal }).catch(() => {});
         if (!TERMINAL.has(task.phase)) await report(task, previous, '继续处理任务');
       }
     }
