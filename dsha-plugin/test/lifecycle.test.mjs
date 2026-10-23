@@ -105,3 +105,39 @@ test('岛内停止使用宿主 cancel user，重复轮询不会重复取消', as
     assert.equal(cancelled, 1);assert.deepEqual(cause, { kind: 'user' });
   } finally { live.dispose(); }
 });
+
+for (const source of ['host', 'island']) test(`${source} 回答不被慢网关扣留，结果记录先于恢复通知`, async () => {
+  const handlers = new Map(), sent = [];
+  let releaseSettlement, startedSettlement;
+  const settlementStarted = new Promise(resolve => { startedSettlement = resolve; });
+  const settlementGate = new Promise(resolve => { releaseSettlement = resolve; });
+  const session = { id:'latency' }, agent = { session }, parent = new AbortController();
+  const answer = { answers:[{id:'q',selected:['继续']}] };
+  const live = installLifecycle({on(name, fn) { handlers.set(name, fn); }}, { intervalMs:60000, post:async(route, body) => {
+    sent.push({route,body});
+    if (route === '/api/question') return {bridge:true};
+    if (route.startsWith('/api/question?')) return source === 'island' ? {state:'submitted',...answer} : {state:'open'};
+    if (route === '/api/question/settle') { startedSettlement(); await settlementGate; }
+    return {};
+  }});
+  let pending;
+  try {
+    handlers.get('agent/status')({agent,status:'running'});
+    pending = handlers.get('user-questions/request')({agent,signal:parent.signal,questions:[{id:'q',question:'继续？',options:[{label:'继续'},{label:'停止'}]}]},
+      () => source === 'host' ? Promise.resolve(answer) : new Promise(() => {}));
+    await settlementStarted;
+    const delayed = Symbol('gateway blocked answer');
+    const result = await Promise.race([pending, new Promise(resolve => setTimeout(() => resolve(delayed),30))]);
+    assert.notEqual(result, delayed, 'gateway acknowledgement must not delay the host answer');
+    assert.deepEqual(result, answer);
+    assert.equal(parent.signal.aborted,false);
+    assert.equal(sent.at(-1).route,'/api/question/settle');
+    releaseSettlement();
+    await live.tasks.get(session.id).queue;
+    assert.equal(sent.at(-1).body.phase,'running');
+  } finally {
+    releaseSettlement();
+    await pending?.catch(() => {});
+    live.dispose();
+  }
+});

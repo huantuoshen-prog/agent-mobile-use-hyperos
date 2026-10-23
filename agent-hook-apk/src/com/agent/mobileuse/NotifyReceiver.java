@@ -394,9 +394,7 @@ public class NotifyReceiver extends BroadcastReceiver {
             }
 
             // Click Jump PendingIntent -> Launch DemoDialogActivity (Action Button Overlay / 灵动坞)
-            Intent overlayIntent = context.getPackageManager().getLaunchIntentForPackage("com.dsh.client");
-            if (overlayIntent == null) overlayIntent = new Intent(context, DemoDialogActivity.class);
-        overlayIntent.putExtra("open_web", true);
+            Intent overlayIntent = TaskIntents.open(context, sessionId);
             // NO_ANIMATION is a best-effort hint; ColorOS still runs its capsule-expand remote
             // transition on notification taps and the flag does not reach WindowManager. The
             // real fix is skip_glow below, which stops the full-screen rim from being scaled

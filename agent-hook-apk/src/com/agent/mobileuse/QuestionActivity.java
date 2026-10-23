@@ -261,9 +261,7 @@ public class QuestionActivity extends Activity {
             HyperIsland.attachQuestion(context, builder, header, questionText, questionIcon, sessionId);
 
             // Direct Jump to DemoDialogActivity (Web Console / 灵动坞) with target session
-            Intent consoleIntent = context.getPackageManager().getLaunchIntentForPackage("com.dsh.client");
-            if (consoleIntent == null) consoleIntent = new Intent(context, DemoDialogActivity.class);
-        consoleIntent.putExtra("open_web", true);
+            Intent consoleIntent = TaskIntents.open(context, sessionId);
             consoleIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             if (sessionId != null && !sessionId.isEmpty()) {
                 consoleIntent.putExtra("session_id", sessionId);

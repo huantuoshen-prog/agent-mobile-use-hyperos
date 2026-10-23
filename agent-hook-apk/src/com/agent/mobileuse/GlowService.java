@@ -289,10 +289,7 @@ public class GlowService extends Service {
             }
 
             if ("FOREGROUND".equals(mode)) {
-                // Foreground: Click pendingIntent -> Handoff to background
-                Intent handoffIntent = getPackageManager().getLaunchIntentForPackage("com.dsh.client");
-                if (handoffIntent == null) handoffIntent = new Intent(this, DemoDialogActivity.class);
-                handoffIntent.putExtra("open_web", true);
+                Intent handoffIntent = TaskIntents.open(this, sid);
                 PendingIntent pi = PendingIntent.getActivity(this, 2028, handoffIntent, flags);
                 builder.setContentIntent(pi);
             } else if ("BACKGROUND".equals(mode) && !"dsha".equals(livePrefs.getString("display_backend", ""))) {
@@ -312,9 +309,7 @@ public class GlowService extends Service {
                 builder.setContentIntent(pi);
             } else {
                 // Running (idle session active, etc.): Click pendingIntent -> Open DemoDialogActivity (Web Console) targeting specific session!
-                Intent consoleIntent = getPackageManager().getLaunchIntentForPackage("com.dsh.client");
-                if (consoleIntent == null) consoleIntent = new Intent(this, DemoDialogActivity.class);
-                consoleIntent.putExtra("open_web", true);
+                Intent consoleIntent = TaskIntents.open(this, sid);
                 // NO_ANIMATION: see the BACKGROUND branch above.
                 consoleIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
                         | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_ANIMATION);

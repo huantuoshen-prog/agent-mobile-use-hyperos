@@ -2575,6 +2575,7 @@ func main() {
 	mux.HandleFunc("/api/notify", handleManualNotice)
 
 	registerQuestionRoutes(mux)
+	registerControlRoutes(mux)
 
 	mux.HandleFunc("/api/auth/secret", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -2730,7 +2731,7 @@ func main() {
 		host = "127.0.0.1"
 	}
 	fmt.Printf("[AgentVD-Web-Go] Listening on %s:%s\n", host, port)
-	if err := http.ListenAndServe(host+":"+port, protectGateway(mux)); err != nil {
+	if err := http.ListenAndServe(host+":"+port, protectGateway(guardControl(mux))); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 	}
 }

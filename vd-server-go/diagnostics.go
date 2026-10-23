@@ -124,6 +124,7 @@ func diagnostics(online bool) DiagnosticReport {
 		add("dsha_app", "pending", "未检测到 DSHA", "安装并初始化 DSHA")
 	}
 	d.Checks = append(d.Checks, diagnoseDSHAToken())
+	d.Checks = append(d.Checks, diagnoseDSHAPlugin(filepath.Join(dshaAppDir, "files"))...)
 	db := "/data/adb/lspd/config/modules_config.db"
 	good := false
 	if _, err := os.Stat(db); err == nil {

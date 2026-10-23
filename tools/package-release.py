@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import zipfile
 
 p=argparse.ArgumentParser();p.add_argument('--apksigner',required=True,type=Path);p.add_argument('--java',required=True,type=Path)
@@ -35,10 +36,12 @@ with zipfile.ZipFile(plugin,'w',zipfile.ZIP_DEFLATED) as z:
     for f in (root/'dsha-plugin/lib').rglob('*'):
         if f.is_file():z.write(f,f.relative_to(root/'dsha-plugin').as_posix())
 prefix='https://github.com/'+cfg['repository']+'/releases/download/v'+cfg['moduleVersion']+'/'
+subprocess.check_call([sys.executable,str(root/'tools/package-remote.py')])
+remote=release/('agent-mobile-use-remote-'+cfg['remoteVersion']+'.zip')
 def asset(f,version):return {'file':f.name,'version':version,'sha256':hashlib.sha256(f.read_bytes()).hexdigest(),'bytes':f.stat().st_size,'url':prefix+f.name}
-manifest={'schema_version':1,'protocol_version':cfg['protocolVersion'],'apk_certificate_sha256':cert,'module':asset(module,cfg['moduleVersion']),'plugin':asset(plugin,cfg['pluginVersion']),'dsh_version':cfg['dshVersion']}
+manifest={'schema_version':1,'protocol_version':cfg['protocolVersion'],'apk_certificate_sha256':cert,'module':asset(module,cfg['moduleVersion']),'plugin':asset(plugin,cfg['pluginVersion']),'remote_client':asset(remote,cfg['remoteVersion']),'dsh_version':cfg['dshVersion']}
 dest=release/('live-agent-'+cfg['moduleVersion'].removesuffix('-alpha')+'-manifest.json');dest.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-sums=release/('SHA256SUMS-'+cfg['moduleVersion'].removesuffix('-alpha')+'.txt');sums.write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.name+'\n' for f in [module,plugin,dest]),encoding='utf-8')
+sums=release/('SHA256SUMS-'+cfg['moduleVersion'].removesuffix('-alpha')+'.txt');sums.write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.name+'\n' for f in [module,plugin,remote,dest]),encoding='utf-8')
 update={'version':cfg['moduleVersion'],'versionCode':cfg['moduleVersionCode'],'zipUrl':prefix+module.name,'changelog':'https://raw.githubusercontent.com/'+cfg['repository']+'/main/docs/releases/v'+cfg['moduleVersion']+'.md',**manifest}
 (staging/'alpha.json').write_text(json.dumps(update,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 print('Packaged',module.name,plugin.name,'certificate='+cert)

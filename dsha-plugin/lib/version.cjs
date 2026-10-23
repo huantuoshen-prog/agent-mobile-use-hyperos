@@ -1,1 +1,1 @@
-module.exports = {"moduleVersion": "0.11.0-alpha", "moduleVersionCode": 1100, "pluginVersion": "0.4.0", "protocolVersion": 2, "repository": "huantuoshen-prog/agent-mobile-use-hyperos", "dshVersion": "0.2.0-rc.2", "channel": "alpha"};
+module.exports = {"moduleVersion": "0.11.0-alpha", "moduleVersionCode": 1100, "pluginVersion": "0.4.0", "remoteVersion": "0.1.0-alpha", "protocolVersion": 2, "repository": "huantuoshen-prog/agent-mobile-use-hyperos", "dshVersion": "0.2.0-rc.2", "channel": "alpha"};

@@ -17,12 +17,18 @@ export function validateHostAnswer(questions, value) {
 
 // Both answerers compete for one waterfall result. The losing Web request is
 // aborted through its child signal, never through the Agent's turn signal.
-export async function answerFromIsland({ request, next, post, key, signal, pollMs = 500 }) {
+export async function answerFromIsland({ request, next, post, key, signal, settle, pollMs = 500 }) {
   const local = new AbortController();
   const original = request.signal;
   const combined = AbortSignal.any([local.signal, ...(original ? [original] : []), ...(signal ? [signal] : [])]);
   const query = new URLSearchParams(key).toString();
   let accepted = false;
+  const record = body => {
+    // Host deadlines also cover this middleware. Bookkeeping must never hold a
+    // human answer. The lifecycle caller queues this before the resumed phase.
+    try { Promise.resolve(settle ? settle(body) : post('/api/question/settle', body, { timeoutMs: 2000 })).catch(() => {}); }
+    catch {}
+  };
   request.signal = combined;
   const host = Promise.resolve().then(() => next()).then(answer => ({ answer, source: 'host' })).catch(async error => {
     if (error?.code !== 'NO_PROVIDER' || combined.aborted) throw error;
@@ -44,14 +50,11 @@ export async function answerFromIsland({ request, next, post, key, signal, pollM
     if (combined.aborted) throw combined.reason;
     const answer = validateHostAnswer(request.questions, winner.answer);
     accepted = true;
-    // Queue acceptance before restoring the task phase. A gateway failure cannot
-    // invalidate an answer that has already won the host waterfall.
-    await post('/api/question/settle', { ...key, state: 'answered', ...answer, answer_source: winner.source }, { timeoutMs: 2000, signal: combined }).catch(() => {});
-    if (combined.aborted) throw combined.reason;
+    record({ ...key, state: 'answered', ...answer, answer_source: winner.source });
     return answer;
   } finally {
     local.abort(new Error('Question answered or closed'));
     request.signal = original;
-    if (!accepted) await post('/api/question/settle', { ...key, state: 'cancelled' }, { timeoutMs: 2000 }).catch(() => {});
+    if (!accepted) record({ ...key, state: 'cancelled' });
   }
 }

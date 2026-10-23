@@ -13,12 +13,13 @@ async function request(url, options = {}) {
   const timer = setTimeout(() => controller.abort(new DOMException('Gateway timeout', 'TimeoutError')), timeoutMs);
   const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
   const headers = new Headers(options.headers);
+  if (options.controlId) headers.set('X-Mobile-Use-Control', options.controlId);
   try {
     const token = fs.readFileSync(tokenFile(), 'utf8').trim();
     if (token) headers.set('Authorization', 'Bearer ' + token);
   } catch {}
   try {
-    const response = await fetch(url, { ...options, headers, signal });
+    const response = await fetch(url, { ...options, headers, signal, redirect: 'error' });
     const maxBytes = options.maxBytes || 16 * 1024 * 1024;
     const chunks = [];
     let total = 0;

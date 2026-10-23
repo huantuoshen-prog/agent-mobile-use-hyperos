@@ -39,6 +39,9 @@ jobs:
           node --test dsha-plugin/test/*.test.*
           cd vd-server-go && go test ./...
 
+      - name: Package portable MCP client
+        run: python3 tools/package-remote.py
+
       # ubuntu-latest already ships an Android SDK at $ANDROID_HOME. Do not use
       # android-actions/setup-android here: it runs `sdkmanager tools`, which no
       # longer exists in current cmdline-tools and fails with exit code 1.
@@ -81,6 +84,7 @@ jobs:
             agent-hook-apk/build/agent_hook-unsigned.apk
             vd-tool-java/bin/*.dex
             vd-server-go/vd_server
+            release/agent-mobile-use-remote-*.zip
           retention-days: 14
 
       - name: Sign with persistent key when configured
@@ -123,6 +127,7 @@ jobs:
           path: |
             release/agent-mobile-use-ksu-v*.zip
             release/dsh-mobile-use-*.zip
+            release/agent-mobile-use-remote-*.zip
             release/live-agent-*-manifest.json
             release/SHA256SUMS-*.txt
             agent-hook-apk/build-ci/release-index/alpha.json

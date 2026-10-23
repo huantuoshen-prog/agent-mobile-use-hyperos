@@ -39,14 +39,17 @@ export function installLifecycle(ctx, { post = gateway.client(), now = Date.now,
   const tasks = new Map();
   const controller = new AbortController();
   let disposed = false;
+  const enqueue = (task, action) => {
+    task.queue = task.queue.catch(() => {}).then(action).catch(() => {});
+    return task.queue;
+  };
   const report = (task, phase, detail = '', extra = {}) => {
     if (disposed) return Promise.resolve();
     task.phase = phase;
     task.detail = detail;
     const payload = { session_id: task.id, turn_id: task.turnId, sequence: ++task.sequence, session_title: task.title,
       phase, detail, total: task.total || 0, completed: task.completed || 0, source: 'dsha', display_backend: task.backend || '', ...extra };
-    task.queue = task.queue.catch(() => {}).then(() => post('/api/live/event', payload, { signal: controller.signal })).catch(() => {});
-    return task.queue;
+    return enqueue(task, () => post('/api/live/event', payload, { signal: controller.signal }));
   };
   const begin = session => {
     const id = sessionId(session);
@@ -116,13 +119,14 @@ export function installLifecycle(ctx, { post = gateway.client(), now = Date.now,
       bridged = bridge && result?.bridge === true;
     }
     try {
-      if (bridged && typeof next === 'function') return await answerFromIsland({ request, next, post, key, signal: controller.signal });
+      if (bridged && typeof next === 'function') return await answerFromIsland({ request, next, post, key, signal: controller.signal,
+        settle: body => enqueue(task, () => post('/api/question/settle', body, { timeoutMs: 2000, signal: controller.signal })) });
       return typeof next === 'function' ? await next() : undefined;
     }
     finally {
       if (task) {
-        if (!bridged) await post('/api/question/cancel', key, { signal: controller.signal }).catch(() => {});
-        if (!TERMINAL.has(task.phase)) await report(task, previous, '继续处理任务');
+        if (!bridged) void enqueue(task, () => post('/api/question/cancel', key, { signal: controller.signal }));
+        if (!TERMINAL.has(task.phase)) void report(task, previous, '继续处理任务');
       }
     }
   }, { prepend: true });

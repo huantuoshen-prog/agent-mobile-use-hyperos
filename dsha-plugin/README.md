@@ -43,3 +43,5 @@ dsha-android 的主屏与 dsha-vscreen 的 App 虚拟屏保留。root 虚拟屏�
 工具参数声明兼容 DSH 的 JSON Schema 子集，数值范围和坐标长度由桥接执行端检查。响应体下载也受超时保护；取消排队动作后不会发送该动作。
 
 状态协议、签名与验收边界见完整源码库中的 docs/live-agent-0.11.md。
+
+电脑/NAS 远程 Agent 使用独立 `agent-mobile-use-remote` ZIP，含显式任务生命周期和手机答题工具，配置见源码库 `docs/remote-access.md`。本 DSHA 插件仍注册 16 个工具并使用宿主事件同步任务；远程客户端注册 17 个工具。远程任务持有控制租约时，本机屏幕操作会报告占用，应先结束该任务再切换控制者。

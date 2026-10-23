@@ -386,9 +386,7 @@ public final class HyperIsland {
 
     private static Notification.Action buildActivityAction(Context context, String title,
                                                            String sessionId) {
-        Intent intent = context.getPackageManager().getLaunchIntentForPackage("com.dsh.client");
-        if (intent == null) intent = new Intent(context, DemoDialogActivity.class);
-        intent.putExtra("open_web", true);
+        Intent intent = TaskIntents.open(context, sessionId);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         intent.putExtra("skip_glow", true);

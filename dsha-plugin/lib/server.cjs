@@ -151,7 +151,7 @@ async function screenshot(options = {}) {
 
 async function call(name, args, options = {}) {
   validate(name, args);
-  const request = (url, extra = {}) => gatewayRequest(url, { timeoutMs: DEFAULT_TIMEOUT_MS, ...extra, signal: options.signal });
+  const request = (url, extra = {}) => gatewayRequest(url, { timeoutMs: DEFAULT_TIMEOUT_MS, ...extra, signal: options.signal, controlId: options.controlId });
   if (options.signal?.aborted) throw options.signal.reason || bad('CANCELLED');
   if (name === 'mobile_screenshot') return screenshot(options);
 
@@ -237,12 +237,20 @@ function send(message) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n');
 }
 
-function startServer() {
+function startServer(options = {}) {
   const active = new Map();
   let buffer = '';
   let queue = Promise.resolve();
   let ended = false;
   let pending = 0;
+  let closing;
+  const close = () => {
+    if (closing) return closing;
+    ended = true;
+    for (const controller of active.values()) controller.abort();
+    closing = Promise.resolve().then(() => options.onClose?.()).catch(() => {});
+    return closing;
+  };
 
   async function receive(message) {
     const { id, method, params = {} } = message;
@@ -262,16 +270,16 @@ function startServer() {
         result = {
           protocolVersion: params.protocolVersion || '2025-03-26',
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'dsh-mobile-use', version: require('./version.cjs').pluginVersion },
+          serverInfo: options.serverInfo || { name: 'dsh-mobile-use', version: require('./version.cjs').pluginVersion },
           instructions:
-            '这些工具操作 agent-mobile-use 的 root 虚拟屏网关（127.0.0.1:3070）。顺序：mobile_start → mobile_mode(background) → mobile_ui_dump/mobile_screenshot → mobile_action。虚拟屏需要 KernelSU 模块；超级岛需要控制台开关。每次动作后重新读屏验证，别凭记忆连点。',
+            options.instructions || '这些工具操作 agent-mobile-use 的 root 虚拟屏网关（127.0.0.1:3070）。顺序：mobile_start → mobile_mode(background) → mobile_ui_dump/mobile_screenshot → mobile_action。虚拟屏需要 KernelSU 模块；超级岛需要控制台开关。每次动作后重新读屏验证，别凭记忆连点。',
         };
       } else if (method === 'ping') {
         result = {};
       } else if (method === 'tools/list') {
-        result = { tools };
+        result = { tools: options.tools || tools };
       } else if (method === 'tools/call') {
-        result = await call(params.name, params.arguments || {}, { signal: controller?.signal });
+        result = await (options.call || call)(params.name, params.arguments || {}, { signal: controller?.signal });
       } else {
         send({ id, error: { code: -32601, message: 'Method not found' } });
         return;
@@ -288,7 +296,7 @@ function startServer() {
       send({
         id,
         result: {
-          content: [{ type: 'text', text: 'mobile-use operation unavailable: ' + detail + '. Check that the KernelSU module is running and 127.0.0.1:3070 answers.' }],
+          content: [{ type: 'text', text: 'mobile-use operation unavailable: ' + detail + '. ' + (options.errorHint || 'Check that the KernelSU module is running and 127.0.0.1:3070 answers.') }],
           isError: true,
         },
       });
@@ -316,6 +324,10 @@ function startServer() {
         send({ id: null, error: { code: -32700, message: 'Parse error' } });
         continue;
       }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        send({ id: null, error: { code: -32600, message: 'Invalid request' } });
+        continue;
+      }
       if (value.method === 'notifications/cancelled') void receive(value);
       else if (pending >= 32) send({ id: value.id ?? null, error: { code: -32000, message: 'Request queue full' } });
       else {
@@ -325,15 +337,14 @@ function startServer() {
       }
     }
   });
-  process.stdin.on('end', () => {
-    ended = true;
-    for (const controller of active.values()) controller.abort();
-  });
+  process.stdin.on('end', close);
+  process.once('SIGINT', () => { void close().finally(() => process.exit(0)); });
+  process.once('SIGTERM', () => { void close().finally(() => process.exit(0)); });
   process.stdout.on('error', (error) => {
-    if (error.code === 'EPIPE') process.exit(0);
+    if (error.code === 'EPIPE') void close().finally(() => process.exit(0));
   });
 }
 
 if (require.main === module) startServer();
 
-module.exports = { definitions, tools, validate, call };
+module.exports = { definitions, tools, validate, call, startServer };
