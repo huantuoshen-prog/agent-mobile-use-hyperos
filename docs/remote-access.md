@@ -1,6 +1,6 @@
 # 电脑与 NAS 远程接入（开发候选）
 
-本轮新增独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套本轮构建的 `0.11.0-alpha` 手机模块。公开的 `0.10.0-alpha` 不包含控制租约接口；早期 0.11 候选也需更新。当前仅通过主机协议和打包测试，尚未完成手机跨网络验收。
+本轮新增独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套本轮构建的 `0.11.0-alpha` 手机模块。公开的 `0.10.0-alpha` 不包含控制租约接口；早期 0.11 候选也需更新。已通过真实手机的局域网 SSH 控制、副屏截图、手机答题和租约失联回收；Tailscale/NAS 跨网仍待验收。
 
 项目：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos
 
@@ -22,7 +22,7 @@
 - 手机：本轮候选 KSU 模块、Root；超级岛功能还需要受支持的 HyperOS、LSPosed 作用域、通知权限和控制中心开关。
 - 电脑/NAS：Node.js 22 或以上、支持 stdio MCP 的 Agent、OpenSSH 客户端。
 - 手机与电脑/NAS 之间有 SSH 通道。可以在同一 Tailscale 私网内使用普通 OpenSSH。Android 的 Tailscale 应用本身不提供 Tailscale SSH 服务端；手机上仍需 SSH 服务端，或采用下面的手机主动反向连接。
-- 手机 SSH 组件可使用已安装的可信实现；需要安装时从 [Termux 官方说明](https://github.com/termux/termux-app#installation) 选择安装来源，在 Termux 安装 `openssh`。连接前设置密钥认证、核验主机指纹，并为该进程配置必要的后台运行权限。当前测试手机的 SSH 组件、端口和后台保活尚未核验。
+- 手机 SSH 组件可使用已安装的可信实现；需要安装时从 [Termux 官方说明](https://github.com/termux/termux-app#installation) 选择安装来源，在 Termux 安装 `openssh`。连接前设置密钥认证、核验主机指纹，并为该进程配置必要的后台运行权限。测试机已验证 Termux OpenSSH 的局域网连接；Android 17 的 Termux 还需允许“访问本地网络”，缺少该权限时即使端口已监听也会连接超时。
 - 将手机 `/data/adb/agent_mobile_use/gateway-token` 通过已认证通道保存为电脑/NAS 的私有文件。读取该手机路径需要已授权的 root。凭据不要写进 MCP 配置、命令参数、共享盘或聊天记录。客户端只接收凭据文件路径。
 
 ## 方案 A：电脑/NAS 连接手机 SSH
@@ -51,7 +51,34 @@ ssh -NT -R 127.0.0.1:23070:127.0.0.1:3070 -o ExitOnForwardFailure=yes -o ServerA
 ssh -NT -L 127.0.0.1:23070:127.0.0.1:23070 -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 nas
 ```
 
-NAS 的 SSH 策略需允许对应转发。转发端口明确绑定回环地址；无需把 3070 或 23070 发布到公网。SSH 断线后需重新建立通道，手机端旧任务会按租约回收；客户端不会自动重新执行屏幕动作。本轮未安装任何 SSH 自启动服务。
+NAS 的 SSH 策略需允许对应转发。转发端口明确绑定回环地址；无需把 3070 或 23070 发布到公网。SSH 断线后需重新建立通道，手机端旧任务会按租约回收；客户端不会自动重新执行屏幕动作。
+
+## 可选：重启后启动既有 Termux SSH
+
+本轮模块新增 `bin/start_remote_ssh.sh`，只启动已经配置好的 Termux OpenSSH；默认关闭。专用配置固定为 Termux home 下 `.ssh/mobile-use/sshd_config`，其中 `PidFile` 应指向同目录 `sshd.pid`。建议配置独立公钥文件、仅公钥认证、只允许转发到 `127.0.0.1:3070`，并明确绑定需要的私网地址。配置样例的关键字段如下，host key 路径按 Termux 的实际安装路径填写：
+
+```text
+Port 8022
+ListenAddress 127.0.0.1
+ListenAddress <手机实际私网IP>
+PidFile /data/data/com.termux/files/home/.ssh/mobile-use/sshd.pid
+AuthorizedKeysFile /data/data/com.termux/files/home/.ssh/mobile-use/authorized_keys
+HostKey /data/data/com.termux/files/usr/etc/ssh/ssh_host_ed25519_key
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+AllowTcpForwarding local
+PermitOpen 127.0.0.1:3070
+AllowAgentForwarding no
+X11Forwarding no
+PermitTTY no
+ForceCommand /system/bin/false
+```
+
+以上专用实例只提供端口转发，不能执行登录 shell 或读取 token；凭据应先经 ADB/其他已授权通道交付。文档后面的 `ssh phone 'su ...'` 凭据示例仅适用于已有普通 SSH 登录权限的通道。
+
+验证专用配置和私网地址后，在手机 root shell 创建 `/data/adb/agent_mobile_use/remote-ssh-enabled` 空文件，并设置为 `0600`；运行 `/data/adb/modules/agent_mobile_use/bin/start_remote_ssh.sh` 验证。启用后模块在开机首次解锁后调用该入口，日志在同一私有目录 `remote-ssh.log`。删除这个开关会停用下次开机启动；当前已运行的 SSH 进程需单独停止。模块不生成密钥、不修改既有 SSH 配置，也不安装 Termux。DHCP 地址变化后应更新专用配置，再重启该 SSH 实例。该入口执行前恢复专用目录的 App SELinux 标签。
 
 ## 保存连接凭据
 
@@ -134,6 +161,40 @@ Windows 的路径可写成 `C:/Tools/agent-mobile-use-remote/lib/remote-cli.cjs`
 
 主机测试运行真实 Node 子进程和 JSON-RPC stdio，覆盖工具声明、任务状态、图像返回、手机问答、取消、停止、心跳、退出清理及两个客户端竞争；网关测试单独覆盖租约所有权、失效、在途操作与手机回答入口。模拟网关结果不代表 Android/SystemUI 已验收。
 
-待真机验证：Tailscale 跨网可达、手机 SSH 后台存活、重启恢复、实际前台/副屏切换、超级岛展开答题、手机停止与断线后的 idle/stopped。旧 DSHA Web 插件目录加载故障仍独立待排查。
+2026-10-24/25 真机记录：先经 ADB 转发 SSH 验证副屏创建、设置页读屏、截图与岛内答案返回电脑；授予 Termux 本地网络权限后，电脑经局域网 SSH 完成相同副屏操作和正常回收。强杀 MCP 客户端后，手机约 31.9 秒自动回到 idle/stopped。DSHA 原生 Web 的加载故障经修复插件文件和链接的 App SELinux 标签后恢复；插件已标记 loaded，真实 DSHA 调用 `mobile_status` 并收到岛内回答“继续验收”。
+
+仍待真机验证：Tailscale/NAS 跨网可达、可选 SSH 开机入口、长时间后台存活、全部复杂答题与通知停止组合。公开发布状态以 Release 和配套 manifest 为准。
 
 协议及传输依据：[MCP stdio](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)、[OpenSSH 的 -L/-R](https://man.openbsd.org/ssh)、[Tailscale SSH 支持平台](https://tailscale.com/docs/features/tailscale-ssh)。
+
+## VPS 上的 DSH
+
+有 Tailscale 子网路由时，先在 VPS 验证到手机 Wi-Fi 地址的路由及 SSH TCP 连通性。已发布子网路由、节点在线和 ping 成功各自不足以证明手机 SSH 可达；VPS 应能实际读取手机 SSH 服务响应。随后使用方案 A，从 VPS 本机建立到手机网关的 SSH 转发。
+
+DSH 使用 `@deepseek-ai/dsh-mcp-client`，配置写到实际运行 profile 的 `cordis.patch.yml`。保留已有 patch 条目，追加一个 `insert` 操作；以下路径均需替换为实际绝对路径：
+
+```yaml
+- insert:
+    - id: mcp-phone
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: phone
+        transport: stdio
+        command: /absolute/path/to/node
+        args:
+          - /absolute/path/phone-mcp/client/lib/remote-cli.cjs
+          - --endpoint
+          - http://127.0.0.1:23070
+          - --token-file
+          - /absolute/private/path/gateway-token
+        toolCallTimeoutMs: 180000
+        failOnStartupError: false
+        reconnect:
+          enabled: false
+```
+
+Node 可使用 DSH 部署自带的 22+ 运行时；系统 PATH 中的 Node 可能是另一版本。客户端、token、SSH 私钥和隧道应由实际运行 DSH 的账户读取/启动；token 和私钥权限为 `0600`。VPS 使用自己的手机 SSH 密钥，将公钥加入手机专用授权文件，保留已有公钥。转发成功后启动/重载 DSH，在工具列表确认 `mcp__phone__mobile_status` 等 17 个工具。
+
+VPS Agent 用 `mobile_task_begin` / `mobile_task_update` / `mobile_task_end` 报告手机实况，用 `mobile_ask` 将问题交给手机；宿主自身的其他提问入口仍按宿主处理。任务超过默认 120 秒答题等待时，还需相应提高 DSH 的调用超时。
+
+本轮已用实际 DSH `0.2.1-rc.2` 的 `assertSupportedJsonSchema` 验证全部 17 个工具。修复前进度和提问工具因 minimum/maximum/minItems/maxItems 被拒绝；现统一转换为 DSH 支持的 schema 子集，范围继续由执行端校验。Node 回归测试同时验证负进度和超出答题等待范围不会提交到手机。

@@ -40,7 +40,7 @@ const definitions = [
 // DSH 0.2 的工具 schema 子集不支持 minimum/minItems/maxItems；范围由 validate 强制执行。
 function schemaForDsh(properties) {
   return JSON.parse(JSON.stringify(properties, (key, value) =>
-    ['minimum', 'minItems', 'maxItems'].includes(key) ? undefined : value));
+    ['minimum', 'maximum', 'minItems', 'maxItems'].includes(key) ? undefined : value));
 }
 
 const REQUIRED = {
@@ -347,4 +347,4 @@ function startServer(options = {}) {
 
 if (require.main === module) startServer();
 
-module.exports = { definitions, tools, validate, call, startServer };
+module.exports = { definitions, tools, validate, call, startServer, schemaForDsh };

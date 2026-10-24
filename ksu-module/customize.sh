@@ -60,6 +60,7 @@ ui_print "- 设置可执行权限..."
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 set_perm "$MODPATH/system/bin/vd" 0 0 0755
 set_perm "$MODPATH/bin/run_daemon.sh" 0 0 0755
+set_perm "$MODPATH/bin/start_remote_ssh.sh" 0 0 0755
 set_perm "$MODPATH/bin/vd_server" 0 0 0755
 set_perm "$MODPATH/bin/sqlite3" 0 0 0755
 set_perm "$MODPATH/service.sh" 0 0 0755

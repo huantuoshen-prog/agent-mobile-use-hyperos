@@ -139,6 +139,14 @@ test('phone stop cancels pending ask and blocks later actions; stdin EOF cleans 
 test('MCP cancellation settles question and releases task; invalid arguments never reach phone', async t => {
   const { state, start } = await fixture(t), a = start();
   await a.call('mobile_task_begin', { title: '取消调用' });
+  const eventCount = state.events.length;
+  for (const [name, args] of [
+    ['mobile_task_update', { total: -1 }],
+    ['mobile_ask', { questions: [{ id: 'q', question: '选择' }], timeout_seconds: 4 }],
+    ['mobile_ask', { questions: [{ id: 'q', question: '选择' }], timeout_seconds: 601 }],
+  ]) assert.equal((await a.call(name, args)).result.isError, true);
+  assert.equal(state.events.length, eventCount, 'runtime bounds remain enforced after schema compatibility conversion');
+  assert.equal(state.questions.length, 0);
   const invalid = await a.call('mobile_ask', { questions: [{ id: 'q', question: '选择', options: [{ label: '重复' }, { label: '重复' }] }] });
   assert.equal(invalid.result.isError, true);assert.equal(state.questions.length, 0);
   const pending = a.call('mobile_ask', { questions: [{ id: 'q', question: '选择' }] });

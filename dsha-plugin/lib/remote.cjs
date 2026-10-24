@@ -15,7 +15,7 @@ const extra = [
     }, required: ['id', 'question'] } }, timeout_seconds: { type: 'integer', minimum: 5, maximum: 600 },
   }, ['questions']],
 ];
-const tools = [...base.tools.filter(t => !['mobile_notify', 'mobile_question', 'mobile_question_cancel'].includes(t.name)), ...extra.map(([name, description, properties, required]) => ({ name, description, inputSchema: { type: 'object', properties, required, additionalProperties: false } }))];
+const tools = [...base.tools.filter(t => !['mobile_notify', 'mobile_question', 'mobile_question_cancel'].includes(t.name)), ...extra.map(([name, description, properties, required]) => ({ name, description, inputSchema: { type: 'object', properties: base.schemaForDsh(properties), required, additionalProperties: false } }))];
 const readOnly = new Set(['mobile_diagnose', 'mobile_status', 'mobile_live_status', 'mobile_apps', 'mobile_audio_status']);
 const result = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], isError: false });
 const fail = code => { throw new Error(code); };

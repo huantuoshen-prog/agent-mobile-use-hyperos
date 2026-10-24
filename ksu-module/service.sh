@@ -31,3 +31,8 @@ chmod 755 /data/local/tmp/run_daemon.sh 2>/dev/null
 if ! pgrep -f "vd_server" >/dev/null 2>&1; then
     nohup "$MODDIR/bin/vd_server" > /data/local/tmp/vd_server.log 2>&1 &
 fi
+
+# Explicit opt-in only; reuse a user-configured SSH transport after first unlock.
+if [ -f /data/adb/agent_mobile_use/remote-ssh-enabled ]; then
+    "$MODDIR/bin/start_remote_ssh.sh" --wait-for-unlock > /data/adb/agent_mobile_use/remote-ssh.log 2>&1
+fi
