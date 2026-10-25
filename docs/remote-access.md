@@ -154,6 +154,7 @@ Windows 的路径可写成 `C:/Tools/agent-mobile-use-remote/lib/remote-cli.cjs`
 - 正常结束及 stdio 退出会释放控制、切换 idle、停止副屏并恢复模块记录的音频设置。进程被强杀或网络中断时，由手机检查租约过期并清理。在途操作必须结束后才交给下一控制者；已执行的操作无法撤销。
 - `cleanup_pending: true` 表示客户端尚未确认手机回收，需等待后读取状态；不要把它报告为已回收。
 - `mobile_task_end` 在自动停止后或重复调用时返回最近一次任务的原始结果，包含 `session_id`、`turn_id`、`outcome`、`detail` 和通知/回收确认。监视故障导致结束时另有 `failure_code`；回收待确认时另有 `cleanup_detail`。调用者传入的新 outcome 不会覆盖已结束任务的结果；显式开始下一任务后，收尾结果归属于新任务。记录仅保存在当前客户端进程内。
+- HyperOS 的模块 App PID 子组可独立于 UID 父组被冻结；网关会按模块自身 UID/PID 解冻对应 cgroup v2 节点，使任务通知和完成广播可被 App 处理。
 - `CONTROL_BUSY_OR_EXPIRED`：另一控制者、仍活动的本机 DSHA 实况任务、过期会话或清理过程占用手机。先结束已有任务；过期后等待回收，再显式重试任务开始。
 - `TASK_NOT_ACTIVE`：屏幕工具调用时没有活动任务；`mobile_task_end` 调用时当前进程也没有保留的收尾结果。
 - `GATEWAY_HTTP_404` 出现在任务开始：通常是手机仍运行缺少租约接口的旧构件，核对候选包 SHA-256。
@@ -169,6 +170,8 @@ Windows 的路径可写成 `C:/Tools/agent-mobile-use-remote/lib/remote-cli.cjs`
 2026-10-25 VPS 完整模型验收：11 次手机工具调用均成功，覆盖任务开始、后台副屏、系统设置读屏、JPEG 截图、进度、手机原始答案“验收通过”、completed 通知及最终 idle/stopped。完成接口返回 notification_confirmed=true、cleanup_pending=false，持久化调用记录与实时状态复查一致。
 
 2026-10-25 恢复验收：首次解锁后手机 SSH 自动启动，VPS 的既有转发服务自动重连；Wi-Fi 中断约 56 秒再接回原地址后也恢复，DSH 主进程保持运行。锁屏副屏修正后，主屏锁定且息屏时已验证设置页读屏、截图与正常回收。
+
+2026-10-26 Issue #1 修复候选：主屏持续 `Dozing` 时两次截图、后续读屏、重复收尾及完成通知通过；VPS 的实际 stdio 客户端在验收代理注入截图 504、监视 503 后仍可继续读屏截图，手机网关停止后可查询原始取消结果，取消通知载荷已核对。候选尚未发布，范围及 App 进程冻结现场见 [Issue #1 验收记录](issue-1-screenshot.md)。
 
 仍待真机验证：NAS 独立 Agent 接入、更长时间后台存活、全部复杂答题与通知停止组合。其他 Wi-Fi/DHCP 地址变化仍按上文调整 SSH 绑定地址。公开发布状态以 Release 和配套 manifest 为准。
 

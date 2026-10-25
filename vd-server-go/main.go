@@ -344,7 +344,7 @@ func getAppUID() string {
 func thawAppProcess() {
 	_ = exec.Command("/system/bin/cmd", "activity", "unfreeze", "--sticky", "com.agent.mobileuse").Run()
 	if uid := getAppUID(); uid != "" {
-		_ = exec.Command("/system/bin/sh", "-c", fmt.Sprintf("echo 0 > /sys/fs/cgroup/apps/uid_%s/cgroup.freeze 2>/dev/null; echo 0 > /sys/fs/cgroup/uid_%s/cgroup.freeze 2>/dev/null", uid, uid)).Run()
+		thawAppCgroups(uid)
 	}
 }
 
