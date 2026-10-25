@@ -10,7 +10,7 @@ DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、
 
 ## 复制给 Agent 一键安装
 
-点击代码框右上角的复制按钮，将整段发给能连接手机并执行安装的 Agent。复制内容包含项目地址、配套安装包和操作步骤；手机连接、系统授权与重启需要你配合。当前指定版本为预发布版 `v0.11.0-alpha`。
+点击代码框右上角的复制按钮，将整段发给能连接手机并执行安装的 Agent。复制内容包含项目地址、配套安装包和操作步骤；手机连接、系统授权与重启需要你配合。当前指定版本为正式 Release `v0.11.0-alpha`，可从 [最新正式发布](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/latest) 下载。
 
 ```text
 请在我的已 Root 手机上实际完成 Agent Mobile Use 的安装和配置，让 DSHA 通过 KSU 模块使用后台虚拟副屏，并在支持的小米/HyperOS 手机上显示超级岛任务实况。请执行安装并验证结果。
@@ -18,7 +18,7 @@ DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、
 项目与安装文档：
 GitHub 仓库：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos
 README：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/blob/main/README.md
-本次安装的 Release（预发布版）：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha
+本次安装的正式 Release：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha
 DSHA 插件说明：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/blob/main/dsha-plugin/README.md
 
 配套下载（模块 0.11.0-alpha + 插件 0.4.0）：

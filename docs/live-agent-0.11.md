@@ -1,4 +1,4 @@
-# 0.11 预发布版：岛内答题、远程接入与安装升级
+# 0.11：岛内答题、远程接入与安装升级
 
 状态：已完成 DSHA 工具调用与岛内二选一回传、VPS 完整模型任务、SSH 开机恢复、Wi-Fi 中断恢复、主屏锁定息屏时的副屏操作，以及多题、多选、自定义答案回传。面板确认接收后自动关闭和超时处理已通过真机验收。手机当前网络限制了在线更新检查，下载保存仍有未完成项目。版本配对为模块 `0.11.0-alpha`、插件 `0.4.0`、远程客户端 `0.1.0-alpha`、网关协议 `2`。生成源为根目录 `release-config.json`。下面按日期保留历史排查记录，当前结果以最新验收节为准。
 
@@ -166,3 +166,8 @@
 - [v0.11.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha) 已作为预发布版公开，配套模块 0.11.0-alpha、插件 0.4.0 和远程客户端 0.1.0-alpha。
 - 发布源码提交为 `2417474`；[对应完整 CI](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/actions/runs/40172810687) 通过。5 个附件先从草稿回下载校验，再于公开后通过不带认证的下载链接重新核对全部哈希。
 - `updates/alpha.json` 在构件公开并校验后切换至本版；README 下载链接与给 Agent 的安装提示词已更新到配套版本。
+
+## 2026-10-25 正式发布状态
+
+- 按维护者决定，既有 `v0.11.0-alpha` Release 改为正式发布并设为 Latest，推广入口为 [最新正式发布](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/latest)。
+- 版本标签、安装包、已验证哈希及下载地址沿用既有值，验收范围和剩余项目保留上文记录。
