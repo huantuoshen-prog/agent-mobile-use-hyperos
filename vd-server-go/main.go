@@ -3,14 +3,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha1"
 	_ "embed"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"io"
 	"log"
 	"net"
@@ -907,18 +907,6 @@ func displaySize(targetDid int, st StatusResp) (int, int) {
 	w, _ := strconv.Atoi(last[1])
 	h, _ := strconv.Atoi(last[2])
 	return w, h
-}
-
-func getSfDisplayID() string {
-	out, err := exec.Command("/system/bin/dumpsys", "SurfaceFlinger", "--display-id").Output()
-	if err != nil {
-		return ""
-	}
-	matches := reSfDisplay.FindStringSubmatch(string(out))
-	if len(matches) > 1 {
-		return matches[1]
-	}
-	return ""
 }
 
 func detectScreenMetrics() (int, int, int) {
@@ -2192,44 +2180,21 @@ func main() {
 			return
 		}
 
-		var args []string
-		if targetDid == 0 {
-			args = []string{"/system/bin/screencap"}
-		} else {
-			sfID := getSfDisplayID()
-			if sfID != "" {
-				args = []string{"/system/bin/screencap", "-d", sfID}
-			} else {
-				args = []string{"/system/bin/screencap", "-d", strconv.Itoa(targetDid)}
+		jpegBytes, err := captureScreenshot(r.Context(), targetDid, runScreenshotCommand)
+		if err != nil {
+			if r.Context().Err() != nil {
+				return
 			}
-		}
-
-		raw, err := exec.Command(args[0], args[1:]...).Output()
-		if err != nil || len(raw) < 16 {
-			http.Error(w, "Capture error", http.StatusInternalServerError)
+			if errors.Is(err, context.DeadlineExceeded) {
+				http.Error(w, "SCREENSHOT_TIMEOUT: capture exceeded 10 seconds", http.StatusGatewayTimeout)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
-
-		wPx := binary.LittleEndian.Uint32(raw[0:4])
-		hPx := binary.LittleEndian.Uint32(raw[4:8])
-		needed := 16 + int(wPx*hPx*4)
-		if wPx == 0 || hPx == 0 || len(raw) < needed {
-			http.Error(w, "Invalid frame buffer", http.StatusInternalServerError)
-			return
-		}
-
-		img := &image.RGBA{
-			Pix:    raw[16:needed],
-			Stride: int(wPx) * 4,
-			Rect:   image.Rect(0, 0, int(wPx), int(hPx)),
-		}
-
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "no-store, must-revalidate")
-		if err := jpeg.Encode(w, img, &jpeg.Options{Quality: 85}); err != nil {
-			http.Error(w, "JPEG encode error", http.StatusInternalServerError)
-			return
-		}
+		_, _ = w.Write(jpegBytes)
 	})
 
 	mux.HandleFunc("/api/action", func(w http.ResponseWriter, r *http.Request) {

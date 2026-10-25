@@ -32,12 +32,17 @@ async function fixture(t) {
     if (owner && owner !== state.owner) return reply({}, 409);
     switch (url.pathname) {
       case '/api/live/event': state.events.push(body);return reply({ success: true, accepted: true });
-      case '/api/live/commands': return reply({ success: true, command: state.command });
+      case '/api/live/commands':
+        if (state.commandFailures > 0) { state.commandFailures--;return reply({}, 503); }
+        return reply({ success: true, command: state.command });
       case '/api/mode': state.mode = url.searchParams.get('mode');return reply({ success: true, mode: state.mode });
       case '/api/start': state.display = 8;return reply({ success: true, display_id: 8 });
       case '/api/stop': state.display = -1;return reply({ status: 'stopped' });
       case '/api/action': state.actions++;return reply({ success: true });
-      case '/api/screenshot': res.writeHead(200);return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+      case '/api/screenshot':
+        if (state.screenshotDelay) await delay(state.screenshotDelay);
+        if (state.screenshotStatus) return reply({ error: 'SCREENSHOT_TIMEOUT' }, state.screenshotStatus);
+        res.writeHead(200);return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
       case '/api/question':
         if (req.method === 'POST') { state.questions.push(body);return reply({ success: true }); }
         return reply(state.answer || { state: 'open' });
@@ -127,6 +132,9 @@ test('phone stop cancels pending ask and blocks later actions; stdin EOF cleans 
   assert.equal((await pending).result.isError, true);
   await until(() => !state.owner);
   assert.equal(state.events.at(-1).phase, 'cancelled');
+  const stopped = text(await a.call('mobile_task_end', { outcome: 'completed' }));
+  assert.equal(stopped.outcome, 'cancelled');assert.equal(stopped.cleanup_pending, false);
+  assert.deepEqual(text(await a.call('mobile_task_end', { outcome: 'failed' })), stopped);
   assert.equal((await a.call('mobile_action', { action: 'click', coordinate: [1, 2] })).result.isError, true);
   state.command = '';
   await a.call('mobile_task_begin', { title: '测试断开' });await a.call('mobile_start');
@@ -134,6 +142,40 @@ test('phone stop cancels pending ask and blocks later actions; stdin EOF cleans 
   a.child.stdin.end();await once(a.child, 'exit');
   assert.equal(state.owner, '');assert.equal(state.display, -1);assert.equal(state.events.at(-1).phase, 'cancelled');
   assert.equal(a.stderr(), '');
+});
+
+test('截图超时仅返回工具错误，任务可继续操作并正常收尾', async t => {
+  const { state, start } = await fixture(t), a = start();
+  await a.call('mobile_task_begin', { title: '截图失败恢复' });
+  await a.call('mobile_start');await a.call('mobile_mode', { mode: 'background' });
+  const owner = state.owner;
+  state.screenshotStatus = 504;
+  assert.equal((await a.call('mobile_screenshot')).result.isError, true);
+  assert.equal(state.owner, owner);
+  assert.equal((await a.call('mobile_action', { action: 'observe' })).result.isError, false);
+  state.screenshotStatus = 0;
+  assert.equal((await a.call('mobile_screenshot')).result.content[1].type, 'image');
+  const done = text(await a.call('mobile_task_end', { outcome: 'completed' }));
+  assert.equal(done.cleanup_pending, false);
+  const count = state.events.length;
+  assert.deepEqual(text(await a.call('mobile_task_end', { outcome: 'failed' })), done);
+  assert.equal(state.events.length, count);
+});
+
+test('截图等待期间单次监视 503 不取消截图，手机停止仍能中断', async t => {
+  const { state, start } = await fixture(t), a = start();
+  await a.call('mobile_task_begin', { title: '截图期间短暂故障' });
+  state.commandFailures = 1;state.screenshotDelay = 1600;
+  const screenshot = (await a.call('mobile_screenshot')).result;
+  assert.equal(screenshot.isError, false, JSON.stringify(screenshot));
+  assert.equal(screenshot.content[1].type, 'image');
+  assert.equal(state.commandFailures, 0);
+  state.screenshotDelay = 2500;
+  const pending = a.call('mobile_screenshot');
+  state.command = 'stop';
+  assert.equal((await pending).result.isError, true);
+  const done = text(await a.call('mobile_task_end', { outcome: 'completed' }));
+  assert.equal(done.outcome, 'cancelled');assert.equal(done.cleanup_pending, false);
 });
 
 test('MCP cancellation settles question and releases task; invalid arguments never reach phone', async t => {
