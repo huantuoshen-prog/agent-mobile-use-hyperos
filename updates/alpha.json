@@ -1,21 +1,31 @@
 {
+  "version": "0.11.0-alpha",
+  "versionCode": 1100,
+  "zipUrl": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/agent-mobile-use-ksu-v0.11.0-alpha.zip",
+  "changelog": "https://raw.githubusercontent.com/huantuoshen-prog/agent-mobile-use-hyperos/main/docs/releases/v0.11.0-alpha.md",
   "schema_version": 1,
-  "version": "0.10.0-alpha",
-  "versionCode": 1000,
-  "zipUrl": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.10.0-alpha/agent-mobile-use-ksu-v0.10.0-alpha.zip",
-  "changelog": "https://raw.githubusercontent.com/huantuoshen-prog/agent-mobile-use-hyperos/main/docs/releases/v0.10.0-alpha.md",
+  "protocol_version": 2,
+  "apk_certificate_sha256": "08d41bb220057ac14fdfed4f40d8ac94ff5e6f0d16699acd266e239517d63d67",
   "module": {
-    "file": "agent-mobile-use-ksu-v0.10.0-alpha.zip",
-    "sha256": "7d9c99e53fad5f16b05866a526f3611732d0c5b5d583b90f217c61ffc8f937f1",
-    "bytes": 5461926,
-    "version": "0.10.0-alpha",
-    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.10.0-alpha/agent-mobile-use-ksu-v0.10.0-alpha.zip"
+    "file": "agent-mobile-use-ksu-v0.11.0-alpha.zip",
+    "version": "0.11.0-alpha",
+    "sha256": "8c435c1ba0160ebd59ac7a0d356a333a102757aa04e763b444d94d31fea9826d",
+    "bytes": 5538579,
+    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/agent-mobile-use-ksu-v0.11.0-alpha.zip"
   },
   "plugin": {
-    "file": "dsh-mobile-use-0.3.0.zip",
-    "sha256": "4edbd83d2bf4f3627a9e78d2491f50682f04104b3c6db45b0eaa5633a4ae004c",
-    "bytes": 14992,
-    "version": "0.3.0",
-    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.10.0-alpha/dsh-mobile-use-0.3.0.zip"
-  }
+    "file": "dsh-mobile-use-0.4.0.zip",
+    "version": "0.4.0",
+    "sha256": "75d5bc398cbe025e6e6a80f8ff38e12419aa288f4ba52ad60d8b4fa89ff4f84c",
+    "bytes": 24154,
+    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/dsh-mobile-use-0.4.0.zip"
+  },
+  "remote_client": {
+    "file": "agent-mobile-use-remote-0.1.0-alpha.zip",
+    "version": "0.1.0-alpha",
+    "sha256": "7a51575ef092676beb97d376507f0acfb15703c3e0d627de399e0626ea6badbe",
+    "bytes": 23317,
+    "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/agent-mobile-use-remote-0.1.0-alpha.zip"
+  },
+  "dsh_version": "0.2.0-rc.2"
 }

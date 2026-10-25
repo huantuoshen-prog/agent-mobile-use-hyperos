@@ -160,3 +160,9 @@
 - 在线更新清单原先不存在，已用已发布 0.10 的真实构件和 SHA-256 建立初始清单。手机后续请求遇到 GitHub 匿名 API 限流（403），raw 域名也无法解析；Release 构件链接本身可达。手机内下载保存验收因此未完成，当前可使用官方 Release 手动下载。
 
 仍待验收：宿主竞争回答和其余复杂取消组合、更长时间后台运行、NAS 独立 Agent，以及手机内下载保存界面。
+
+## 2026-10-25 预发布构件公开核对
+
+- [v0.11.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha) 已作为预发布版公开，配套模块 0.11.0-alpha、插件 0.4.0 和远程客户端 0.1.0-alpha。
+- 发布源码提交为 `2417474`；[对应完整 CI](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/actions/runs/40172810687) 通过。5 个附件先从草稿回下载校验，再于公开后通过不带认证的下载链接重新核对全部哈希。
+- `updates/alpha.json` 在构件公开并校验后切换至本版；README 下载链接与给 Agent 的安装提示词已更新到配套版本。
