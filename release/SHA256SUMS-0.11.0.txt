@@ -1,4 +1,4 @@
-018507a248e8435e8d1f0e272808e2a2ecf39307b94f2c1dbfca2a56420bc4d5  agent-mobile-use-ksu-v0.11.0-alpha.zip
-57de03eea71d9f295edba836a33ae4a6f3333d830c5d1cb28cdf2e7ce6f41714  dsh-mobile-use-0.4.0.zip
-8954422d12b6e0617484aa7f4683e90317e1920ff25b7d1e7af6a92d626a119b  agent-mobile-use-remote-0.1.0-alpha.zip
-c55d93b7636c50b616f74256cd6b20d1e66e6f2f672701a4c4837d7bbf0b3c33  live-agent-0.11.0-manifest.json
+8c435c1ba0160ebd59ac7a0d356a333a102757aa04e763b444d94d31fea9826d  agent-mobile-use-ksu-v0.11.0-alpha.zip
+75d5bc398cbe025e6e6a80f8ff38e12419aa288f4ba52ad60d8b4fa89ff4f84c  dsh-mobile-use-0.4.0.zip
+7a51575ef092676beb97d376507f0acfb15703c3e0d627de399e0626ea6badbe  agent-mobile-use-remote-0.1.0-alpha.zip
+56ed40583334a9bf4cbbab6f8db54b5284ff30e5cbae80480e7bf4f570abbb38  live-agent-0.11.0-manifest.json

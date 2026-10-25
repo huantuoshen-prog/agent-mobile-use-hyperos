@@ -1,6 +1,6 @@
-# dsh-mobile-use 0.4.0（DSHA 插件，候选版）
+# dsh-mobile-use 0.4.0（DSHA 插件，预发布版）
 
-面向使用 DSHA 且手机已 root 的用户，把 agent_mobile_use 0.11.0 的后台虚拟副屏接入 DSHA，并从宿主真实任务事件同步小米超级岛状态。针对 DSH 0.2.0-rc.2 接口开发；注册普通 MCP tools。DSHA 加载、实际工具调用与岛内二选一答案回传已通过；复杂答题及安装界面仍有待验收项目。已发布构件以 GitHub Release 为准。
+面向使用 DSHA 且手机已 root 的用户，把 agent_mobile_use 0.11.0 的后台虚拟副屏接入 DSHA，并从宿主真实任务事件同步小米超级岛状态。针对 DSH 0.2.0-rc.2 接口开发；注册普通 MCP tools。DSHA 加载、实际工具调用与岛内二选一答案回传已通过；模块多题、多选/自定义及面板关闭另已通过远程 Agent 真机验收。其余宿主竞争回答和下载界面等项目见主仓库验收记录。已发布构件以 GitHub Release 为准。
 
 ## 状态与工具
 

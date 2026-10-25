@@ -4,13 +4,13 @@
 
 DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、读屏和操作。任务进行、前台控制、后台副屏、等待回答、完成、失败和停止等状态会同步到超级岛，手机上可以查看进展、进入 DSHA 或停止任务。
 
-[下载 v0.10.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) · [交给 Agent 安装](#复制给-agent-一键安装) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.10.md) · [English](#english)
+[下载 v0.11.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha) · [交给 Agent 安装](#复制给-agent-一键安装) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.11.md) · [English](#english)
 
-开发候选新增[电脑/NAS/VPS 远程 Agent 接入](docs/remote-access.md)：独立 MCP 客户端通过 SSH/Tailscale 使用模块副屏、超级岛实况和手机答题。VPS 完整模型任务、首次解锁后的 SSH 自动恢复、Wi-Fi 中断重连，以及主屏锁定息屏时的副屏读屏和截图已通过真机验证。该功能需本轮 0.11 候选模块；复杂答题、安装界面等待验收项目见[验收记录](docs/live-agent-0.11.md)。下面的下载和一键安装内容仍对应已发布的 0.10。
+0.11 提供[电脑/NAS/VPS 远程 Agent 接入](docs/remote-access.md)：独立 MCP 客户端通过 SSH/Tailscale 使用模块副屏、超级岛实况和手机答题。已验证 VPS 完整模型任务、SSH 开机恢复、Wi-Fi 中断重连、主屏锁定息屏时的副屏读屏和截图，以及多题、多选和自定义回答。答题面板在 Agent 确认接收后自动关闭，超时后退出。适配范围和剩余项目见[验收记录](docs/live-agent-0.11.md)。
 
 ## 复制给 Agent 一键安装
 
-点击代码框右上角的复制按钮，将整段发给能连接手机并执行安装的 Agent。复制内容包含项目地址、配套安装包和操作步骤；手机连接、系统授权与重启需要你配合。当前指定版本为预发布版 `v0.10.0-alpha`。
+点击代码框右上角的复制按钮，将整段发给能连接手机并执行安装的 Agent。复制内容包含项目地址、配套安装包和操作步骤；手机连接、系统授权与重启需要你配合。当前指定版本为预发布版 `v0.11.0-alpha`。
 
 ```text
 请在我的已 Root 手机上实际完成 Agent Mobile Use 的安装和配置，让 DSHA 通过 KSU 模块使用后台虚拟副屏，并在支持的小米/HyperOS 手机上显示超级岛任务实况。请执行安装并验证结果。
@@ -18,44 +18,46 @@ DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、
 项目与安装文档：
 GitHub 仓库：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos
 README：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/blob/main/README.md
-本次安装的 Release（预发布版）：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha
+本次安装的 Release（预发布版）：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha
 DSHA 插件说明：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/blob/main/dsha-plugin/README.md
 
-配套下载（模块 0.10.0-alpha + 插件 0.3.0）：
-KSU 模块：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.10.0-alpha/agent-mobile-use-ksu-v0.10.0-alpha.zip
-DSHA 插件：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.10.0-alpha/dsh-mobile-use-0.3.0.zip
-SHA-256 校验文件：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.10.0-alpha/SHA256SUMS.txt
+配套下载（模块 0.11.0-alpha + 插件 0.4.0）：
+KSU 模块：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/agent-mobile-use-ksu-v0.11.0-alpha.zip
+DSHA 插件：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/dsh-mobile-use-0.4.0.zip
+SHA-256 校验文件：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/SHA256SUMS.txt
 
 按以下步骤执行：
 1. 阅读上述文档，确认目标手机、CPU 架构、系统版本、Root、KernelSU、LSPosed 和 DSHA 状态。项目已验证 Redmi K90 / HyperOS 4 / Android 17 / ARM64，DSHA build170 / DSH 0.2.0-rc.2；其他环境先核对兼容性。若未连接手机，先向我索取当前 ADB 地址或可用的连接方式；缺少依赖时报告具体缺项。
 2. 下载上述两个 ZIP 和校验文件，逐一核对 SHA-256。记录已安装版本，备份已有模块和相关设置，保留 DSHA、插件与控制台的数据。校验失败时停止安装；APK 签名冲突时保留现场并报告具体错误，不卸载应用或清除数据。
-3. 在 KernelSU 管理器中安装 agent-mobile-use-ksu-v0.10.0-alpha.zip。该包包含网关、运行时和控制台 APK；安装脚本会尝试配置本模块的 LSPosed 作用域。核对 com.agent.mobileuse 已启用，作用域包含 android、system、com.android.systemui、com.agent.mobileuse、com.xiaomi.xmsf。然后重启手机，等待开机并首次解锁；若无线 ADB 端口变化，向我索取新地址后继续。
+3. 在 KernelSU 管理器中安装 agent-mobile-use-ksu-v0.11.0-alpha.zip。该包包含网关、运行时和控制台 APK；安装脚本会尝试配置本模块的 LSPosed 作用域。核对 com.agent.mobileuse 已启用，作用域包含 android、system、com.android.systemui、com.agent.mobileuse、com.xiaomi.xmsf。然后重启手机，等待开机并首次解锁；若无线 ADB 端口变化，向我索取新地址后继续。
 4. 从 LSPosed 的模块设置入口打开控制中心，检查模块版本、网关 ONLINE 和 LSPosed ACTIVE。允许控制台发送通知，并开启“超级岛通知（HyperOS）”。遇到需要手机上点击的授权，告诉我具体入口并等待我完成。
-5. 在 DSHA 自带插件管理器中导入 dsh-mobile-use-0.3.0.zip，按界面提示完成安装确认并重启 DSHA Web。确认 dsh-mobile-use 已加载、十五个 mobile-use 工具已注册。使用路径为 DSHA → mobile-use 插件 → 本机网关 → KSU 模块副屏；无需为这条路径额外开启 DSHA Root Shell 或创建 DSHA 自带副屏。网关使用本机 127.0.0.1:3070，按项目机制交付私有 token，不公开 token。
+5. 在 DSHA 自带插件管理器中导入 dsh-mobile-use-0.4.0.zip，按界面提示完成安装确认并重启 DSHA Web。确认 dsh-mobile-use 已加载、十六个 mobile-use 工具已注册。使用路径为 DSHA → mobile-use 插件 → 本机网关 → KSU 模块副屏；无需为这条路径额外开启 DSHA Root Shell 或创建 DSHA 自带副屏。网关使用本机 127.0.0.1:3070，按项目机制交付私有 token，不公开 token。
 6. 在 DSHA 中真实调用 mobile_status，按工具声明传参，执行只读验收：mobile_start → mobile_mode(background) → mobile_action(launch_app，打开系统设置) → mobile_ui_dump / mobile_screenshot。确认副屏可读可截图，并核对手机超级岛的任务进行、后台副屏和完成状态。工具完整名称带 mcp__mobile-use__ 前缀。验收后执行 mobile_mode(idle) → mobile_stop，确认副屏已回收。
-7. 给我安装版本、校验结果、工具调用结果和超级岛实际显示情况。无法验证的项目明确列出，并给出具体错误及下一步。安装过程需要连接手机、手机授权或重启配合时，说明当前步骤后再通知我操作。
+7. 用宿主 ask_user_question 提出简短二选一问题，核对展开超级岛后选择的原文回到原会话；多选/自定义回答进入模块面板，Agent 确认接收后面板应自动关闭。给我安装版本、校验结果、工具调用结果和超级岛实际显示情况。无法验证的项目明确列出，并给出具体错误及下一步。安装过程需要连接手机、手机授权或重启配合时，说明当前步骤后再通知我操作。
 ```
 
 ![DSHA Root 副屏与超级岛真机展示](docs/images/v0.10/showcase.png)
 
-*图片来自 2026-10-21 真机截图，仅裁剪、缩放和拼版。展开卡片可查看任务说明并停止任务；收起后显示紧凑胶囊。*
+*图片来自 2026-10-21 真机截图，仅裁剪、缩放和拼版。上图记录 0.10 的任务卡片与紧凑胶囊；0.11 的答题与远程接入能力见下文。*
 
 ## 能做什么
 
 - **后台虚拟副屏**：将应用启动到模块创建的副屏，通过 DSHA 工具截图、读取控件和操作，支持与物理主屏切换。
-- **DSHA 直接调用**：配套插件注册十五个工具，提供副屏创建、回收、缩放、截图、读屏、输入、应用枚举和音频设置等能力。
+- **DSHA 直接调用**：配套插件注册十六个工具，提供副屏创建、回收、缩放、截图、读屏、输入、应用枚举和音频设置等能力。
 - **小米超级岛**：按真实任务阶段切换图标、颜色和内容，后台副屏带外圈光效；等待状态保持单个紧凑胶囊。
 - **自动同步任务状态**：监听 DSHA 宿主事件，结束状态由整轮任务结果确认；todo 清单提供实际进度数量。
-- **手机端停止**：通知按钮绑定当前会话和轮次，发送停止请求并等待 DSHA 确认结果。
+- **手机端停止**：通知按钮绑定当前会话和轮次，发送停止请求并等待 Agent 确认结果。
+- **超级岛答题**：展开后回答简短二选一；多选和自定义文字进入模块面板，确认接收后自动返回。
+- **远程 Agent**：电脑、NAS 或 VPS 可经 SSH/Tailscale 使用独立 MCP 客户端的 17 个工具。
 
 ## 环境
 
 | 项目 | 本次验证环境 |
 | --- | --- |
 | DSHA | Android App build170，DSH 0.2.0-rc.2 |
-| 模块 | KernelSU + LSPosed，模块 0.10.0-alpha |
+| 模块 | KernelSU + LSPosed，模块 0.11.0-alpha |
 | 手机 | Redmi K90，HyperOS 4 / Android 17，ARM64 |
-| 配套插件 | dsh-mobile-use 0.3.0 |
+| 配套插件 | dsh-mobile-use 0.4.0 |
 
 核心使用路径：**DSHA → mobile-use 插件 → 本机网关 → KSU 模块副屏**。模块副屏不要求开启 DSHA 的 Root Shell 开关或创建 DSHA 自带副屏；模块运行所需的 root 由模块环境提供。
 
@@ -63,13 +65,13 @@ SHA-256 校验文件：https://github.com/huantuoshen-prog/agent-mobile-use-hype
 
 ## 安装
 
-从 [Release](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) 下载两个 ZIP：
+从 [Release](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha) 下载两个 ZIP：
 
 | 文件 | 用途 |
 | --- | --- |
-| `agent-mobile-use-ksu-v0.10.0-alpha.zip` | 在 KernelSU 管理器安装，包含网关、运行时和控制台 APK |
-| `dsh-mobile-use-0.3.0.zip` | 在 DSHA 自带插件管理器导入 |
-| `SHA256SUMS.txt` / `live-agent-0.10.0-manifest.json` | 下载校验及包内二进制校验 |
+| `agent-mobile-use-ksu-v0.11.0-alpha.zip` | 在 KernelSU 管理器安装，包含网关、运行时和控制台 APK |
+| `dsh-mobile-use-0.4.0.zip` | 在 DSHA 自带插件管理器导入 |
+| `SHA256SUMS.txt` / `live-agent-0.11.0-manifest.json` | 下载校验及包内二进制校验 |
 
 1. 安装 KSU 模块，确认 LSPosed 中本模块已启用，然后重启并首次解锁手机。
 2. 从 LSPosed 的模块设置入口打开控制中心，确认网关 ONLINE、LSPosed ACTIVE。允许控制台发送通知，开启“超级岛通知（HyperOS）”。
@@ -97,7 +99,7 @@ mobile_start
 
 `foreground` 操作物理主屏，`background` 操作模块副屏；切换后重新读屏再决定操作坐标。没有应用时先用 `launch_app` 启动目标应用。
 
-可回答的问题使用 DSHA 的 `ask_user_question`。插件自动显示等待状态，答案由 DSHA 处理；`mobile_question` 仅投递问题通知。
+可回答的问题使用 DSHA 的 `ask_user_question`。简短二选一在展开超级岛后直接选择，多题按顺序回答；多选、长说明和自定义文字进入模块面板。Agent 确认接收后面板自动关闭，取消或超时的问题不再接受提交。`mobile_question` 仅投递问题通知。远程 MCP 使用 `mobile_ask`，完整接入方式见[远程 Agent 文档](docs/remote-access.md)。
 
 | 任务状态 | 超级岛表现 |
 | --- | --- |
@@ -117,9 +119,11 @@ mobile_start
 - 真实提问、手机提交答案、完成通知，以及通知停止按钮中断 DSHA 均已验证。
 - 七种状态已检查系统通知载荷；前台、后台和等待状态已目视核对。展开态外圈效果另见上方手机截图。
 - 重启后自动启动、私有 token 交付、通知权限、个性化设置和 LSPosed 作用域保留通过；再次真实调用 `mobile_status` 成功。
-- 19 项 Go 顶层测试、7 项 Node 测试、Java 82 项载荷检查及七状态检查通过。
+- 32 项 Go 顶层测试、19 项 Node 测试、Java 82 项载荷检查及七状态检查通过；本轮 UI 修正完成全部 Android 源码编译、固定证书签名和真机操作验收。
+- 多选“读屏/截图”及自定义文字 `panel-ok` 已回到 VPS；面板自动关闭和 30 秒超时拒绝旧答案已验证。
+- 手机当前网络遇到 GitHub API 匿名限流及 raw 域名解析问题，手机内检查更新/下载保存仍有未完成验收；可从本页的 Release 入口下载并安装。
 
-[完整协议与验收边界](docs/live-agent-0.10.md) · [HyperOS 适配说明](docs/hyperos.md) · [插件工具清单](dsha-plugin/README.md)
+[完整协议与验收边界](docs/live-agent-0.11.md) · [HyperOS 适配说明](docs/hyperos.md) · [插件工具清单](dsha-plugin/README.md)
 
 ## 开发
 
@@ -134,7 +138,7 @@ Android 构件使用 JDK 17、Android SDK 和 Go 构建。Windows 构建入口�
 
 ## English
 
-Agent Mobile Use provides a root-backed background virtual display for **DSHA users with rooted Android phones**, with Xiaomi HyperOS Super Island task notifications. The DSHA plugin exposes fifteen tools and follows real host lifecycle events for running, foreground, background, waiting, completed, failed and cancelled states.
+Agent Mobile Use provides a root-backed background virtual display for **DSHA users with rooted Android phones**, with Xiaomi HyperOS Super Island task notifications. The DSHA plugin exposes sixteen tools and follows real host lifecycle events for running, foreground, background, waiting, completed, failed and cancelled states.
 
 Install the KernelSU module and the matching DSHA plugin from the release. This module's display backend does not require DSHA's separate built-in virtual-display permission. The current device-tested setup is Redmi K90, HyperOS 4 / Android 17, KernelSU, LSPosed and DSHA build170. Other ROMs require separate validation. Historical APK signatures may prevent a normal overwrite upgrade; back up first.
 

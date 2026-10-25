@@ -1,6 +1,6 @@
-# 电脑与 NAS 远程接入（开发候选）
+# 电脑、NAS 与 VPS 远程接入（0.11 预发布版）
 
-本轮新增独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套本轮构建的 `0.11.0-alpha` 手机模块。公开的 `0.10.0-alpha` 不包含控制租约接口；早期 0.11 候选也需更新。已通过真实手机的局域网 SSH 控制、副屏截图、手机答题和租约失联回收；VPS 经既有 Tailscale 子网路由的完整模型验收已通过，NAS 独立 Agent 接入仍待验收。
+0.11 提供独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套 `0.11.0-alpha` 手机模块。0.10 不包含控制租约接口；早期 0.11 候选应更新到本次配套构件。已通过真实手机的局域网 SSH 控制、副屏截图、手机答题和租约失联回收；VPS 经既有 Tailscale 子网路由的完整模型验收已通过，NAS 独立 Agent 接入仍待验收。
 
 项目：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos
 
@@ -19,7 +19,7 @@
 
 ## 需要准备
 
-- 手机：本轮候选 KSU 模块、Root；超级岛功能还需要受支持的 HyperOS、LSPosed 作用域、通知权限和控制中心开关。
+- 手机：0.11 配套 KSU 模块、Root；超级岛功能还需要受支持的 HyperOS、LSPosed 作用域、通知权限和控制中心开关。
 - 电脑/NAS：Node.js 22 或以上、支持 stdio MCP 的 Agent、OpenSSH 客户端。
 - 手机与电脑/NAS 之间有 SSH 通道。可以在同一 Tailscale 私网内使用普通 OpenSSH。Android 的 Tailscale 应用本身不提供 Tailscale SSH 服务端；手机上仍需 SSH 服务端，或采用下面的手机主动反向连接。
 - 手机 SSH 组件可使用已安装的可信实现；需要安装时从 [Termux 官方说明](https://github.com/termux/termux-app#installation) 选择安装来源，在 Termux 安装 `openssh`。连接前设置密钥认证、核验主机指纹，并为该进程配置必要的后台运行权限。测试机已验证 Termux OpenSSH 的局域网连接；Android 17 的 Termux 还需允许“访问本地网络”，缺少该权限时即使端口已监听也会连接超时。
@@ -95,7 +95,7 @@ Windows 请把凭据保存为 UTF-8 文本文件，并通过文件属性中的�
 
 ## 安装客户端与配置 MCP
 
-候选 ZIP 为 `agent-mobile-use-remote-0.1.0-alpha.zip`。解压到固定目录，包含 `package.json`、`LICENSE`、`README.md` 与 `lib/`；运行无需 `npm install`。当前仓库可执行 `python tools/sync-version.py`、`python tools/package-remote.py` 生成本地包。完整发布时其 SHA-256 与模块、DSHA 插件一起写入配套 manifest 和校验文件。
+客户端 ZIP 为 `agent-mobile-use-remote-0.1.0-alpha.zip`。解压到固定目录，包含 `package.json`、`LICENSE`、`README.md` 与 `lib/`；运行无需 `npm install`。当前仓库可执行 `python tools/sync-version.py`、`python tools/package-remote.py` 生成本地包。完整发布时其 SHA-256 与模块、DSHA 插件一起写入配套 manifest 和校验文件。
 
 MCP 配置示例（具体宿主的配置入口以其说明为准）：
 
