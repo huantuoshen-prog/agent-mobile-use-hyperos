@@ -91,6 +91,16 @@ public class DaemonMain {
             //           FLAG_TRUSTED (1024) | VIRTUAL_DISPLAY_FLAG_OWN_FOCUS (16384) |
             //           VIRTUAL_DISPLAY_FLAG_STEAL_TOP_FOCUS_DISABLED (65536)
             int flags = 1545 | 16384 | 65536;
+            // A display in the default group inherits the physical screen's keyguard.
+            // Android requires OWN_DISPLAY_GROUP together with ALWAYS_UNLOCKED;
+            // both flags apply only to this root-owned virtual display.
+            try {
+                int ownGroup = dmClass.getField("VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP").getInt(null);
+                int alwaysUnlocked = dmClass.getField("VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED").getInt(null);
+                flags |= ownGroup | alwaysUnlocked;
+            } catch (ReflectiveOperationException unavailable) {
+                System.err.println("[AgentDaemon] Independent unlocked display groups unavailable on this Android version.");
+            }
             VirtualDisplay vd = null;
 
             try {

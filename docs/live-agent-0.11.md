@@ -1,6 +1,6 @@
 # 0.11 候选版：岛内答题与安装升级
 
-状态：本地候选源码与签名构件已生成。测试手机安装过前一轮候选，重启后的模块版本及哈希已核对；DSHA Web 的插件目录加载失败尚未修复，岛内问答尚待真机验收。手机当前离开局域网，本轮新增修改尚未安装；尚未发布。版本配对为模块 `0.11.0-alpha`、插件 `0.4.0`、网关协议 `2`。生成源为根目录 `release-config.json`。
+状态：候选版已完成 DSHA 工具调用与岛内二选一回传、VPS 完整模型任务、首次解锁后的 SSH 开机恢复及 Wi-Fi 中断恢复验证。锁屏时副屏显示时钟的问题已定位并修复，真机读屏和截图通过；复杂答题、安装检查与下载界面等项目仍待验收，尚未发布 Release。版本配对为模块 `0.11.0-alpha`、插件 `0.4.0`、远程客户端 `0.1.0-alpha`、网关协议 `2`。生成源为根目录 `release-config.json`。下面按日期保留历史排查记录，当前结果以最新验收节为准。
 
 ## 超级岛与宿主接口依据
 
@@ -72,10 +72,13 @@
 - [x] KernelSU 覆盖安装，原 App UID、5 份偏好文件及通知权限保留，LSPosed 路径和作用域正确；待重启模块的全部构件哈希已核对。
 - [ ] DSHA 插件管理器导入 0.4.0，Web 重启后确认 16 个工具。
 - [ ] 安装检查页截图、凭据修复、手动更新及校验失败路径。
-- [ ] 真实模型提问，岛内双按钮点击后 Agent 收到对应原文；检查折叠宽度和展开内容。
+- [x] 真实 DSHA 模型提问与 VPS 模型提问，岛内双按钮点击后对应 Agent 收到原文答案。
+- [ ] 复杂问题的折叠宽度和展开内容逐项检查。
 - [ ] 连续两题、面板多选/自定义、原生界面抢先回答、旧按钮、取消和超时。
 - [ ] 前台及后台副屏只读任务，结束后 idle/stopped，通知和实况无残留。
 - [ ] 重启并首次解锁后检查版本、凭据、插件接入及真实模型调用。
+- [x] 首次解锁后 SSH 自动启动，既有 VPS 隧道自动恢复；Wi-Fi 断开约 56 秒后自动重连，原 DSH 主进程继续运行。
+- [x] 物理主屏锁定且息屏时，VPS 在独立副屏打开系统设置、读屏、截图并回收。
 
 2026-10-22 安装记录：模块通过 KernelSU 原生安装流程写入待重启目录，插件通过 DSHA 插件管理器的预览、摘要确认和安装流程升级到 0.4.0。旧模块、控制台数据、偏好与旧插件已保存在私有备份目录。24 项 Go 顶层测试在手机 ARM64 环境通过；真实 Agent 与 SystemUI 问答验收尚未完成。
 
@@ -108,7 +111,7 @@
 - 远程会话的通知“查看”及完成通知点击进入模块控制台；手机答题仍进入模块答题页。DSHA 会话保持宿主跳转入口。
 - 配套远程 ZIP 与 DSHA 插件、模块共同写入 manifest/SHA-256；CI 即使没有签名密钥也可产出远程客户端。固定证书签名的完整手机候选已重新构建，公开 0.10 构件保持原字节，在线更新索引尚未发布。解压后的独立客户端通过相同 5 项 stdio 集成测试。
 
-手机当前不在局域网内，本轮没有安装或重启手机，也没有配置 NAS/路由器。跨网 SSH/Tailscale、Android 后台保活和 SystemUI 按钮回传均待设备验收。
+当日手机不在局域网内，未安装或重启手机，也未配置 NAS/路由器；后续设备验收记录见下文。
 
 ## 2026-10-24/25 真机与 VPS 接入
 
@@ -131,4 +134,17 @@
 - mobile_task_end(outcome=completed) 返回 notification_confirmed=true、cleanup_pending=false。
 - 最后 mobile_status 返回 mode=idle、status=stopped、display_id=-1；随后实时复查任务实况为空，VPS DSH 与 SSH 转发服务均为 active。
 
-此记录确认了 VPS 经既有 Tailscale 子网路由控制手机、手机答案回到 VPS Agent、完成通知及资源回收的完整路径。SSH 开机恢复修正版的再次安装与重启、长时间后台、NAS 独立接入以及其余复杂答题/下载界面项目继续保留待验收状态。
+此记录确认了 VPS 经既有 Tailscale 子网路由控制手机、手机答案回到 VPS Agent、完成通知及资源回收的完整路径。
+
+## 2026-10-25 开机、网络恢复与锁屏副屏
+
+- 安装 SSH 等待首次解锁修正版，重启并首次解锁后 SSH 自动启动；11 个保留的模块文件哈希匹配候选 ZIP，原 UID、5 份偏好文件和网关凭据保留。KernelSU 安装时消费的 `customize.sh` 不属于重启后保留文件。
+- VPS 的 SSH 转发服务自动建立新连接，DSH 主进程 PID 保持一致，实际 SDK 再次发现并校验 17 个工具，`mobile_status` 实调成功。该次恢复没有手动启动手机 SSH 或重启 VPS 服务。
+- 使用 Android 原生 shell 关闭 Wi-Fi 后约 56 秒重新打开，观察到手机 SSH 不可达，恢复后 VPS SSH 进程自动重建，既有 DSH 主进程继续工作。该测试使用相同 Wi-Fi 地址；跨不同 DHCP 地址的自动适配尚未实现。
+- 初次锁屏测试虽然工具调用成功，副屏实际显示锁屏时钟；该次 UI 验收记为失败。`DaemonMain` 原有副屏属于默认显示组，未请求独立解锁状态。
+- 修正副屏创建参数：在系统提供对应字段时同时使用 `VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP` 和 `VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED`，保留原有独立焦点和禁止抢占主屏焦点标志。依据 [Android DisplayManager 定义](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android17-release/core/java/android/hardware/display/DisplayManager.java)及 [VirtualDisplayAdapter 的配对检查](https://android.googlesource.com/platform/frameworks/base/+/master/services/core/java/com/android/server/display/VirtualDisplayAdapter.java)。没有这两个字段的旧系统沿用原有行为，并输出兼容性日志。
+- 修正后的真机记录同时确认：主屏 `showing=true`、`inputRestricted=true`、`SCREEN_STATE_OFF`；模块副屏位于独立显示组且状态为 ON。VPS 读取到设置页中的 WLAN、蓝牙等控件，截图为实际设置页，结束后恢复 idle/stopped、display_id=-1，完成接口确认通知与回收。
+- 一次 180 秒持续运行在 `mobile_task_end` 阶段报错，副屏已回收，首次失败原因未确认。增加错误记录后的同实现复测通过：起始和 180 秒后的设置页均可读，截图为 156068 字节 JPEG，完成通知及回收确认成功。该结果只覆盖短时持续运行，长时间稳定性仍待验证。
+- 运行时修正已增量编译、部署并重新打包；手机保留的 11 个模块文件与当前候选 ZIP 逐项匹配，已安装 APK、LSPosed 路径、启用状态和作用域核对通过。原候选构件和设备文件已在私有目录备份。
+
+仍待验收：上述结束调用失败的复现定位、更长时间后台运行、NAS 独立 Agent、复杂答题/通知停止组合、安装检查和下载保存界面，以及最终配套构件的发布核对。

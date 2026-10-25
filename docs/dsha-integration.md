@@ -12,7 +12,7 @@ DSH 0.2.0-rc.2 的 computer-use registry 只允许一个 provider，DSHA 已占�
 
 ## 版本与安装
 
-已发布版为模块 0.10.0-alpha + 插件 0.3.0。当前源码准备模块 0.11.0-alpha + 插件 0.4.0，新增功能尚待真机验收。安装包以 [GitHub Releases](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases) 中的配套版本为准。
+已发布版为模块 0.10.0-alpha + 插件 0.3.0。当前候选为模块 0.11.0-alpha + 插件 0.4.0，已验证 DSHA 加载、实际工具调用与岛内二选一答案回传；复杂答题和安装界面仍有待验收项目。安装包以 [GitHub Releases](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases) 中的配套版本为准。
 
 1. 在 KernelSU 安装模块，核对 LSPosed 已启用本模块及其作用域，重启并首次解锁。
 2. 打开 DSHA，完成运行环境初始化。

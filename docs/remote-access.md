@@ -165,7 +165,9 @@ Windows 的路径可写成 `C:/Tools/agent-mobile-use-remote/lib/remote-cli.cjs`
 
 2026-10-25 VPS 完整模型验收：11 次手机工具调用均成功，覆盖任务开始、后台副屏、系统设置读屏、JPEG 截图、进度、手机原始答案“验收通过”、completed 通知及最终 idle/stopped。完成接口返回 notification_confirmed=true、cleanup_pending=false，持久化调用记录与实时状态复查一致。
 
-仍待真机验证：NAS 独立 Agent 接入、可选 SSH 开机入口、长时间后台存活、全部复杂答题与通知停止组合。公开发布状态以 Release 和配套 manifest 为准。
+2026-10-25 恢复验收：首次解锁后手机 SSH 自动启动，VPS 的既有转发服务自动重连；Wi-Fi 中断约 56 秒再接回原地址后也恢复，DSH 主进程保持运行。锁屏副屏修正后，主屏锁定且息屏时已验证设置页读屏、截图与正常回收。
+
+仍待真机验证：NAS 独立 Agent 接入、更长时间后台存活、全部复杂答题与通知停止组合。其他 Wi-Fi/DHCP 地址变化仍按上文调整 SSH 绑定地址。公开发布状态以 Release 和配套 manifest 为准。
 
 协议及传输依据：[MCP stdio](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)、[OpenSSH 的 -L/-R](https://man.openbsd.org/ssh)、[Tailscale SSH 支持平台](https://tailscale.com/docs/features/tailscale-ssh)。
 
