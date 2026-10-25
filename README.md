@@ -6,7 +6,7 @@ DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、
 
 [下载 v0.10.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.10.0-alpha) · [交给 Agent 安装](#复制给-agent-一键安装) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.10.md) · [English](#english)
 
-开发候选新增[电脑/NAS/VPS 远程 Agent 接入](docs/remote-access.md)：独立 MCP 客户端通过 SSH/Tailscale 使用模块副屏、超级岛实况和手机答题。电脑到手机的实际操作、岛内答题和断线回收已通过；VPS 已完成接入部署、17 个工具的 SDK 校验及状态实调，完整模型任务仍待手动验收。该功能需本轮 0.11 候选模块，SSH 开机恢复等未完成项见[验收记录](docs/live-agent-0.11.md)。下面的下载和一键安装内容仍对应已发布的 0.10。
+开发候选新增[电脑/NAS/VPS 远程 Agent 接入](docs/remote-access.md)：独立 MCP 客户端通过 SSH/Tailscale 使用模块副屏、超级岛实况和手机答题。电脑到手机的实际操作、岛内答题和断线回收已通过；VPS 经既有 Tailscale 子网路由完成真实模型验收，11 次工具调用覆盖副屏、读屏、截图、手机答题、完成通知与回收。该功能需本轮 0.11 候选模块，SSH 开机恢复等未完成项见[验收记录](docs/live-agent-0.11.md)。下面的下载和一键安装内容仍对应已发布的 0.10。
 
 ## 复制给 Agent 一键安装
 

@@ -1,6 +1,6 @@
 # 电脑与 NAS 远程接入（开发候选）
 
-本轮新增独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套本轮构建的 `0.11.0-alpha` 手机模块。公开的 `0.10.0-alpha` 不包含控制租约接口；早期 0.11 候选也需更新。已通过真实手机的局域网 SSH 控制、副屏截图、手机答题和租约失联回收；Tailscale/NAS 跨网仍待验收。
+本轮新增独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套本轮构建的 `0.11.0-alpha` 手机模块。公开的 `0.10.0-alpha` 不包含控制租约接口；早期 0.11 候选也需更新。已通过真实手机的局域网 SSH 控制、副屏截图、手机答题和租约失联回收；VPS 经既有 Tailscale 子网路由的完整模型验收已通过，NAS 独立 Agent 接入仍待验收。
 
 项目：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos
 
@@ -163,7 +163,9 @@ Windows 的路径可写成 `C:/Tools/agent-mobile-use-remote/lib/remote-cli.cjs`
 
 2026-10-24/25 真机记录：先经 ADB 转发 SSH 验证副屏创建、设置页读屏、截图与岛内答案返回电脑；授予 Termux 本地网络权限后，电脑经局域网 SSH 完成相同副屏操作和正常回收。强杀 MCP 客户端后，手机约 31.9 秒自动回到 idle/stopped。DSHA 原生 Web 的加载故障经修复插件文件和链接的 App SELinux 标签后恢复；插件已标记 loaded，真实 DSHA 调用 `mobile_status` 并收到岛内回答“继续验收”。
 
-仍待真机验证：Tailscale/NAS 跨网可达、可选 SSH 开机入口、长时间后台存活、全部复杂答题与通知停止组合。公开发布状态以 Release 和配套 manifest 为准。
+2026-10-25 VPS 完整模型验收：11 次手机工具调用均成功，覆盖任务开始、后台副屏、系统设置读屏、JPEG 截图、进度、手机原始答案“验收通过”、completed 通知及最终 idle/stopped。完成接口返回 notification_confirmed=true、cleanup_pending=false，持久化调用记录与实时状态复查一致。
+
+仍待真机验证：NAS 独立 Agent 接入、可选 SSH 开机入口、长时间后台存活、全部复杂答题与通知停止组合。公开发布状态以 Release 和配套 manifest 为准。
 
 协议及传输依据：[MCP stdio](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)、[OpenSSH 的 -L/-R](https://man.openbsd.org/ssh)、[Tailscale SSH 支持平台](https://tailscale.com/docs/features/tailscale-ssh)。
 

@@ -120,3 +120,15 @@
 - 沿既有 Tailscale 子网路由完成 VPS 到手机 SSH 实测。经用户明确授权，在 VPS 新建独立密钥和 SSH 转发服务，私有交付 token，备份后追加 DSH MCP patch，重启现有 DSH 服务。既有路由器规则及 DSH 原配置条目保留。
 - VPS 的 DSH 0.2.1-rc.2 / Node 24.22.1 实际 SDK 完成 MCP 协商、发现并校验 17 个工具及 mobile_status 实调；主 DSH 服务持有手机 MCP 子进程，无 phone MCP 启动错误。完整模型任务依用户要求留待手动提交验收提示词。
 - 修复远程工具进度与问题 schema 的范围关键词兼容：声明转换为 DSH 支持的子集，执行端继续校验范围；19 项 Node 回归测试通过。
+
+## 2026-10-25 VPS 完整模型验收通过
+
+用户手动提交验收任务后，本轮只读核对了 VPS 的持久化会话记录，并将每条手机工具调用与对应 callId 的结果匹配。共 11 次调用，全部 isError=false：
+
+- mobile_status → mobile_task_begin → mobile_start → mobile_mode(background)。
+- mobile_action(launch_app, com.android.settings) → mobile_ui_dump → mobile_screenshot；截图返回 158742 字节 JPEG，记录保留 image 内容块，没有 image unavailable 降级。
+- mobile_task_update → mobile_ask；收到原始答案 selected=["验收通过"]。
+- mobile_task_end(outcome=completed) 返回 notification_confirmed=true、cleanup_pending=false。
+- 最后 mobile_status 返回 mode=idle、status=stopped、display_id=-1；随后实时复查任务实况为空，VPS DSH 与 SSH 转发服务均为 active。
+
+此记录确认了 VPS 经既有 Tailscale 子网路由控制手机、手机答案回到 VPS Agent、完成通知及资源回收的完整路径。SSH 开机恢复修正版的再次安装与重启、长时间后台、NAS 独立接入以及其余复杂答题/下载界面项目继续保留待验收状态。

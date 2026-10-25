@@ -19,8 +19,8 @@
   "remote_client": {
     "file": "agent-mobile-use-remote-0.1.0-alpha.zip",
     "version": "0.1.0-alpha",
-    "sha256": "b76f6ac89fb85934c69a13b128aac28fb1abf6ed2f120e20056a5407b5d880f4",
-    "bytes": 22986,
+    "sha256": "c86f618622df20a94fb60c4f120b60cf9825315a45e47f491becb12bf67fe4f4",
+    "bytes": 23151,
     "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/download/v0.11.0-alpha/agent-mobile-use-remote-0.1.0-alpha.zip"
   },
   "dsh_version": "0.2.0-rc.2"
