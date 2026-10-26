@@ -19,6 +19,12 @@ const tools = [...base.tools.filter(t => !['mobile_notify', 'mobile_question', '
 const readOnly = new Set(['mobile_diagnose', 'mobile_status', 'mobile_live_status', 'mobile_apps', 'mobile_audio_status']);
 const result = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], isError: false });
 const fail = code => { throw new Error(code); };
+const LEASE_MS = 30000;
+
+function transientGatewayError(error) {
+  return ['TimeoutError', 'AbortError', 'TypeError'].includes(error.name)
+    || /^GATEWAY_HTTP_(429|5\d\d)$/.test(error.message);
+}
 
 function validate(name, args) {
   const def = extra.find(d => d[0] === name);
@@ -55,6 +61,7 @@ class RemoteClient {
   constructor(endpoint) {
     this.endpoint = endpoint;
     this.task = null;
+    this.lastTask = null;
     this.closed = false;
   }
   async api(route, body, options = {}) {
@@ -80,7 +87,7 @@ class RemoteClient {
     if (this.closed) fail('CLIENT_CLOSED');
     if (this.task) fail('TASK_ALREADY_ACTIVE');
     const owner = randomUUID();
-    const task = { owner, sid: 'remote-' + owner, turn: randomUUID(), title: args.title, seq: 0, phase: 'running', mode: 'idle', detail: '', total: 0, completed: 0, events: Promise.resolve(), abort: new AbortController(), lastRenew: Date.now() };
+    const task = { owner, sid: 'remote-' + owner, turn: randomUUID(), title: args.title, seq: 0, phase: 'running', mode: 'idle', detail: '', total: 0, completed: 0, events: Promise.resolve(), abort: new AbortController(), lastRenew: Date.now(), lastPoll: Date.now() };
     task.api = (route, body, options) => this.api(route, body, { ...options, controlId: owner });
     // Do not cancel the acquire response: an uncertain acquisition must be released.
     try { await task.api('/api/control/acquire', {}); }
@@ -90,6 +97,7 @@ class RemoteClient {
       throw error;
     }
     this.task = task;
+    this.lastTask = null;
     try {
       if (signal?.aborted || this.closed) fail('CANCELLED');
       await this.report(task, 'running', '远程 Agent 已连接');
@@ -103,20 +111,34 @@ class RemoteClient {
     if (task.finishing || task.watching) return;
     task.watching = true;
     try {
+      if (Date.now() - task.lastRenew >= LEASE_MS || Date.now() - task.lastPoll >= LEASE_MS) fail('CONTROL_CONNECTION_EXPIRED');
       if (Date.now() - task.lastRenew >= 10000) {
-        await task.api('/api/control/renew', {});
-        if (task.finishing) return;
-        task.lastRenew = Date.now();
-        await this.report(task, task.phase);
+        const renewedAt = Date.now();
+        try {
+          await task.api('/api/control/renew', {});
+          if (task.finishing) return;
+          task.lastRenew = renewedAt;
+          await this.report(task, task.phase);
+        } catch (error) {
+          // 续租或通知暂时失败后仍检查手机停止；失败续租不延长本地租约。
+          if (!transientGatewayError(error)) throw error;
+        }
       }
+      if (task.finishing) return;
+      if (Date.now() - task.lastRenew >= LEASE_MS) fail('CONTROL_CONNECTION_EXPIRED');
       const query = new URLSearchParams({ session_id: task.sid, turn_id: task.turn });
       const value = await task.api('/api/live/commands?' + query, undefined, { signal: task.abort.signal });
+      task.lastPoll = Date.now();
       if (value.command === 'stop') await this.finish(task, 'cancelled', '用户在手机上停止了任务');
-    } catch {
-      if (!task.finishing) await this.finish(task, 'failed', '远程连接已中断，停止手机控制');
+    } catch (error) {
+      // 仅在已确认的租约内容忍短暂传输故障；失去控制权后必须停止。
+      if (!task.finishing && (!transientGatewayError(error) || Date.now() - task.lastRenew >= LEASE_MS || Date.now() - task.lastPoll >= LEASE_MS)) {
+        const code = /^[A-Z_0-9]+$/.test(error.message) ? error.message : error.name;
+        await this.finish(task, 'failed', '远程控制失效，停止手机控制', code);
+      }
     } finally { task.watching = false; }
   }
-  finish(task, outcome, detail) {
+  finish(task, outcome, detail, failureCode) {
     if (task.finishing) return task.finishing;
     clearInterval(task.timer);
     task.abort.abort(new Error('TASK_STOPPED'));
@@ -124,9 +146,11 @@ class RemoteClient {
       let notified = true, released = false;
       try { await this.report(task, outcome, detail); } catch { notified = false; }
       try { released = (await task.api('/api/control/release', {}, { timeoutMs: 10000 })).released === true; } catch {}
-      if (this.task === task) this.task = null;
-      return result({ success: true, outcome, notification_confirmed: notified, cleanup_pending: !released,
-        ...(released ? {} : { detail: '等待手机端租约到期及在途操作结束后回收；不要自动重放动作。' }) });
+      if (this.task === task) { this.task = null; this.lastTask = task; }
+      return result({ success: true, session_id: task.sid, turn_id: task.turn, outcome, detail,
+        notification_confirmed: notified, cleanup_pending: !released,
+        ...(failureCode ? { failure_code: failureCode } : {}),
+        ...(released ? {} : { cleanup_detail: '等待手机端租约到期及在途操作结束后回收；不要自动重放动作。' }) });
     })();
     return task.finishing;
   }
@@ -165,9 +189,14 @@ class RemoteClient {
     if (options.signal?.aborted) throw options.signal.reason;
     if (name === 'mobile_task_begin') return this.begin(args, options.signal);
     if (readOnly.has(name)) return base.call(name, args, options);
+    // 自动停止后仍可取回原始终态；重复收尾不能把失败改报为完成。
+    if (name === 'mobile_task_end') {
+      const ending = this.task || this.lastTask;
+      if (!ending) fail('TASK_NOT_ACTIVE');
+      return this.finish(ending, args.outcome, args.detail || '');
+    }
     const task = this.task;
     if (!task || task.finishing) fail('TASK_NOT_ACTIVE');
-    if (name === 'mobile_task_end') return this.finish(task, args.outcome, args.detail || '');
     const signal = AbortSignal.any([task.abort.signal, ...(options.signal ? [options.signal] : [])]);
     try {
       if (name === 'mobile_task_update') {
