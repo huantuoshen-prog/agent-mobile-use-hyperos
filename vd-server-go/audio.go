@@ -47,7 +47,16 @@ func audioModeFromOutput(out string) (string, bool) {
 		return match[1], true
 	}
 	if strings.Contains(out, "No operations") {
-		return "default", true
+		// Newer Android versions report the effective default explicitly.
+		defaultMode := regexp.MustCompile(`Default mode:\s*(allow|ignore|default|foreground|deny)`)
+		if match := defaultMode.FindStringSubmatch(out); len(match) == 2 {
+			return match[1], true
+		}
+		// PLAY_AUDIO defaults to MODE_ALLOWED. MODE_DEFAULT is a distinct
+		// AppOps value and restoring it can leave playback muted.
+		if strings.TrimSpace(out) == "No operations." || strings.TrimSpace(out) == "No operations" {
+			return "allow", true
+		}
 	}
 	return "", false
 }

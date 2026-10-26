@@ -6,7 +6,15 @@ import (
 )
 
 func TestAudioOriginalModesArePreserved(t *testing.T) {
-	for out, want := range map[string]string{"PLAY_AUDIO: ignore; time=123": "ignore", "PLAY_AUDIO: foreground": "foreground", "No operations.": "default"} {
+	for out, want := range map[string]string{
+		"PLAY_AUDIO: ignore; time=123":            "ignore",
+		"PLAY_AUDIO: foreground":                  "foreground",
+		"PLAY_AUDIO: default":                     "default",
+		"No operations.":                          "allow",
+		"No operations.\nDefault mode: allow":     "allow",
+		"No operations.\nDefault mode: ignore":    "ignore",
+		"PLAY_AUDIO: ignore\nDefault mode: allow": "ignore",
+	} {
 		got, ok := audioModeFromOutput(out)
 		if !ok || got != want {
 			t.Fatalf("%q: %q %v", out, got, ok)
@@ -14,6 +22,9 @@ func TestAudioOriginalModesArePreserved(t *testing.T) {
 	}
 	if _, ok := audioModeFromOutput("permission denied"); ok {
 		t.Fatal("unknown state converted to allow")
+	}
+	if _, ok := audioModeFromOutput("No operations.\nDefault mode: unknown"); ok {
+		t.Fatal("unknown default mode converted to allow")
 	}
 }
 
