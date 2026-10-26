@@ -1,6 +1,7 @@
 package com.agent;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.app.UiAutomation;
 import android.graphics.Rect;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -602,11 +603,9 @@ public class ToolMain {
             uiAutomation = uiClass.getConstructor(Looper.class, iuacClass)
                     .newInstance(ht.getLooper(), uac);
 
-            try {
-                uiClass.getMethod("connect", int.class).invoke(uiAutomation, 0);
-            } catch (NoSuchMethodException e) {
-                uiClass.getMethod("connect").invoke(uiAutomation);
-            }
+            // 默认连接会暂停其他无障碍服务；保留并行运行，避免影响实体音量键。
+            uiClass.getMethod("connect", int.class).invoke(uiAutomation,
+                    UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
 
             AccessibilityServiceInfo info = new AccessibilityServiceInfo();
             info.eventTypes = -1;
