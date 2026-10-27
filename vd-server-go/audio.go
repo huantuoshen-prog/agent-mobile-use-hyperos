@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,17 +41,30 @@ func setAudioMuteEnabled(enabled bool) {
 }
 
 var originalAudioModes = make(map[string]string)
+var audioJournalPath = filepath.Join(privateStateDir, "audio-restore.json")
+var runAudioCommand = func(args ...string) ([]byte, error) {
+	return exec.Command("/system/bin/cmd", args...).Output()
+}
+
+// PLAY_AUDIO's effective default is allow. Replaying the literal MODE_DEFAULT
+// saved by older gateways leaves AudioService's opPlayAudio mute in place.
+func restorableAudioMode(mode string) string {
+	if mode == "default" {
+		return "allow"
+	}
+	return mode
+}
 
 func audioModeFromOutput(out string) (string, bool) {
 	re := regexp.MustCompile(`PLAY_AUDIO:\s*(allow|ignore|default|foreground|deny)`)
 	if match := re.FindStringSubmatch(out); len(match) == 2 {
-		return match[1], true
+		return restorableAudioMode(match[1]), true
 	}
 	if strings.Contains(out, "No operations") {
 		// Newer Android versions report the effective default explicitly.
 		defaultMode := regexp.MustCompile(`Default mode:\s*(allow|ignore|default|foreground|deny)`)
 		if match := defaultMode.FindStringSubmatch(out); len(match) == 2 {
-			return match[1], true
+			return restorableAudioMode(match[1]), true
 		}
 		// PLAY_AUDIO defaults to MODE_ALLOWED. MODE_DEFAULT is a distinct
 		// AppOps value and restoring it can leave playback muted.
@@ -65,7 +79,7 @@ func saveAudioJournalLocked() error {
 	if err != nil {
 		return err
 	}
-	p := filepath.Join(privateStateDir, "audio-restore.json")
+	p := audioJournalPath
 	if err = os.WriteFile(p+".tmp", b, 0600); err != nil {
 		return err
 	}
@@ -81,7 +95,7 @@ func setPackageMuted(pkg string, userId int, mute bool) {
 	original, tracked := originalAudioModes[key]
 	if mute {
 		if !tracked {
-			out, err := exec.Command("/system/bin/cmd", "appops", "get", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO").Output()
+			out, err := runAudioCommand("appops", "get", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO")
 			if err != nil {
 				return
 			}
@@ -96,11 +110,11 @@ func setPackageMuted(pkg string, userId int, mute bool) {
 				return
 			}
 		}
-		if exec.Command("/system/bin/cmd", "appops", "set", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO", "ignore").Run() == nil {
+		if _, err := runAudioCommand("appops", "set", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO", "ignore"); err == nil {
 			mutedPackages[pkg] = userId
 		}
 	} else if tracked {
-		if exec.Command("/system/bin/cmd", "appops", "set", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO", original).Run() == nil {
+		if _, err := runAudioCommand("appops", "set", "--user", strconv.Itoa(userId), pkg, "PLAY_AUDIO", restorableAudioMode(original)); err == nil {
 			delete(originalAudioModes, key)
 			delete(mutedPackages, pkg)
 			_ = saveAudioJournalLocked()
@@ -142,7 +156,7 @@ func unmuteAllAudio() {
 		if len(parts) != 2 {
 			continue
 		}
-		if exec.Command("/system/bin/cmd", "appops", "set", "--user", parts[0], parts[1], "PLAY_AUDIO", original).Run() == nil {
+		if _, err := runAudioCommand("appops", "set", "--user", parts[0], parts[1], "PLAY_AUDIO", restorableAudioMode(original)); err == nil {
 			delete(originalAudioModes, key)
 			delete(mutedPackages, parts[1])
 		}
@@ -197,12 +211,39 @@ func reconcileVdAudio(vdDid int) {
 	}
 }
 
-// initAudioGuard sets up fail-safe sweeps and signal handlers
-func initAudioGuard() {
-	if b, err := os.ReadFile(filepath.Join(privateStateDir, "audio-restore.json")); err == nil {
+// Older gateways removed their journal after restoring the wrong literal
+// default. Repair those untracked entries too; explicit ignore/deny/foreground
+// modes are excluded by query-op's mode filter.
+func repairLegacyAudioDefaults(userIDs []int) {
+	pkgPattern := regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$`)
+	for _, userID := range userIDs {
+		user := strconv.Itoa(userID)
+		out, err := runAudioCommand("appops", "query-op", "--user", user, "PLAY_AUDIO", "default")
+		if err != nil {
+			log.Printf("[AudioGuard] Cannot query legacy playback modes for user %s: %v", user, err)
+			continue
+		}
+		for _, pkg := range strings.Fields(string(out)) {
+			if !pkgPattern.MatchString(pkg) {
+				continue
+			}
+			if _, err := runAudioCommand("appops", "set", "--user", user, pkg, "PLAY_AUDIO", "allow"); err != nil {
+				log.Printf("[AudioGuard] Cannot repair legacy playback mode for %s:%s: %v", user, pkg, err)
+			}
+		}
+	}
+}
+
+func restoreAudioState(userIDs []int) {
+	if b, err := os.ReadFile(audioJournalPath); err == nil {
 		audioMu.Lock()
 		_ = json.Unmarshal(b, &originalAudioModes)
 		audioMu.Unlock()
 	}
 	unmuteAllAudio()
+	repairLegacyAudioDefaults(userIDs)
+}
+
+func initAudioGuard() {
+	restoreAudioState(parseUserIDs())
 }
