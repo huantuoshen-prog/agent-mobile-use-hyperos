@@ -50,6 +50,12 @@ SHA-256 校验文件：https://github.com/huantuoshen-prog/agent-mobile-use-hype
 - **超级岛答题**：展开后回答简短二选一；多选和自定义文字进入模块面板，确认接收后自动返回。
 - **远程 Agent**：电脑、NAS 或 VPS 可经 SSH/Tailscale 使用独立 MCP 客户端的 17 个工具。
 
+### 使用场景
+
+副屏的价值取决于任务：需要把应用操作放到后台、保留主屏使用，或让电脑/NAS/VPS 上的 Agent 调用手机时，可以按需启用。如果手机端 Agent 已覆盖你的主要任务，且没有屏幕争用，副屏的额外收益可能很小。只用手机也可以完成自己的工作，设备数量无需成为技术讨论的资格条件。
+
+虚拟副屏负责隔离操作，阅读时的对号入座暂不在适配范围内。
+
 ## 环境
 
 | 项目 | 本次验证环境 |
@@ -145,3 +151,5 @@ Install the KernelSU module and the matching DSHA plugin from the release. This 
 ## 来源与许可
 
 基于 [AcidGr/agent-mobile-use](https://github.com/AcidGr/agent-mobile-use) 继续开发。HyperOS 协议参考 [小米开发指南](https://dev.mi.com/xiaomihyperos/documentation/detail?pId=2131) 和 MIT 项目 [HyperIsland](https://github.com/1812z/HyperIsland)。保留原作者酸小明（AcidGr）的版权声明，源码采用 [MIT License](LICENSE)。
+
+本项目沿用上游代码开展 fork 与适配，开发过程使用 AI 辅助。来源、改动与验收记录均可查阅；欢迎带着具体代码和复现步骤交流，“互相学习”也有了可以落地的位置。
