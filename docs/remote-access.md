@@ -1,5 +1,7 @@
 # 电脑、NAS 与 VPS 远程接入（0.11）
 
+当前开发源码还提供直接安装到通用 DSH profile 的 bundle 模式，使用同一租约与 17 个工具，见 [通用 DSH 宿主接入](../dsha-plugin/dsh-hosts.md)。该模式尚未包含在 v0.11.0-alpha 的 0.4.0 插件发布包中。
+
 0.11 提供独立 MCP stdio 客户端 `agent-mobile-use-remote 0.1.0-alpha`，需配套 `0.11.0-alpha` 手机模块。0.10 不包含控制租约接口；早期 0.11 候选应更新到本次配套构件。已通过真实手机的局域网 SSH 控制、副屏截图、手机答题和租约失联回收；VPS 经既有 Tailscale 子网路由的完整模型验收已通过，NAS 独立 Agent 接入仍待验收。
 
 项目：https://github.com/huantuoshen-prog/agent-mobile-use-hyperos
@@ -95,7 +97,7 @@ Windows 请把凭据保存为 UTF-8 文本文件，并通过文件属性中的�
 
 ## 安装客户端与配置 MCP
 
-客户端 ZIP 为 `agent-mobile-use-remote-0.1.0-alpha.zip`。解压到固定目录，包含 `package.json`、`LICENSE`、`README.md` 与 `lib/`；运行无需 `npm install`。当前仓库可执行 `python tools/sync-version.py`、`python tools/package-remote.py` 生成本地包。完整发布时其 SHA-256 与模块、DSHA 插件一起写入配套 manifest 和校验文件。
+客户端 ZIP 为 `agent-mobile-use-remote-0.1.0-alpha.zip`。解压到固定目录，包含 `package.json`、`LICENSE`、`README.md` 与 `lib/`；运行无需 `npm install`。当前仓库可执行 `python tools/sync-version.py`、`python tools/package-remote.py --output-dir /absolute/path/to/output` 生成本地包，避免覆盖仓库中已有的发布包。完整发布时其 SHA-256 与模块、DSHA 插件一起写入配套 manifest 和校验文件。
 
 MCP 配置示例（具体宿主的配置入口以其说明为准）：
 

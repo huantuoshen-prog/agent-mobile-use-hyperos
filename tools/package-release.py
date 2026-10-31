@@ -31,7 +31,7 @@ with zipfile.ZipFile(module) as z:
         digest,name=line.split();assert hashlib.sha256(z.read(name)).hexdigest()==digest,name
     assert not any(name.endswith(('.keystore','.jks','.p12')) for name in z.namelist())
 with zipfile.ZipFile(plugin,'w',zipfile.ZIP_DEFLATED) as z:
-    for name in ('package.json','cordis.patch.yml','README.md'):z.write(root/'dsha-plugin'/name,name)
+    for name in ('package.json','cordis.patch.yml','README.md','dsh-hosts.md'):z.write(root/'dsha-plugin'/name,name)
     z.write(root/'LICENSE','LICENSE')
     for f in (root/'dsha-plugin/lib').rglob('*'):
         if f.is_file():z.write(f,f.relative_to(root/'dsha-plugin').as_posix())

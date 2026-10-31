@@ -8,6 +8,10 @@ function tokenFile() {
 
 // 不记录 token，不自动重放已经提交的屏幕动作。
 async function request(url, options = {}) {
+  const target = new URL(url);
+  if (target.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(target.hostname) || target.username || target.password) {
+    throw new Error('ENDPOINT_REQUIRES_LOOPBACK_SSH_FORWARD');
+  }
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs || 120000;
   const timer = setTimeout(() => controller.abort(new DOMException('Gateway timeout', 'TimeoutError')), timeoutMs);
@@ -15,7 +19,7 @@ async function request(url, options = {}) {
   const headers = new Headers(options.headers);
   if (options.controlId) headers.set('X-Mobile-Use-Control', options.controlId);
   try {
-    const token = fs.readFileSync(tokenFile(), 'utf8').trim();
+    const token = fs.readFileSync(options.tokenFile || tokenFile(), 'utf8').trim();
     if (token) headers.set('Authorization', 'Bearer ' + token);
   } catch {}
   try {
@@ -39,13 +43,14 @@ async function request(url, options = {}) {
   }
 }
 
-function client(base = process.env.MOBILE_USE_BASE || 'http://127.0.0.1:3070') {
+function client(base = process.env.MOBILE_USE_BASE || 'http://127.0.0.1:3070', defaults = {}) {
   return async function post(route, body, options = {}) {
     const response = await request(base + route, {
       method: body === undefined ? 'GET' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
       timeoutMs: 2500,
+      ...defaults,
       ...options,
     });
     const value = await response.json();

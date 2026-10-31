@@ -14,9 +14,13 @@ function configure(argv) {
   const url = new URL(endpoint);
   if (url.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(url.hostname) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('ENDPOINT_REQUIRES_LOOPBACK_SSH_FORWARD');
   if (!tokenFile || !path.isAbsolute(tokenFile)) throw new Error('TOKEN_FILE_REQUIRES_ABSOLUTE_PATH');
-  const stat = fs.statSync(tokenFile);
+  let stat;
+  try { stat = fs.statSync(tokenFile); }
+  catch { throw new Error('TOKEN_FILE_UNAVAILABLE'); }
   if (!stat.isFile() || stat.size > 512 || (process.platform !== 'win32' && (stat.mode & 0o077))) throw new Error('TOKEN_FILE_MUST_BE_PRIVATE');
-  const token = fs.readFileSync(tokenFile, 'utf8').trim();
+  let token;
+  try { token = fs.readFileSync(tokenFile, 'utf8').trim(); }
+  catch { throw new Error('TOKEN_FILE_UNAVAILABLE'); }
   if (!/^[0-9a-f]{64}$/i.test(token)) throw new Error('INVALID_TOKEN_FILE');
   process.env.MOBILE_USE_BASE = url.origin;
   process.env.MOBILE_USE_TOKEN_FILE = tokenFile;

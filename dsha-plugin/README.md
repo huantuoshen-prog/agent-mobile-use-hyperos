@@ -1,6 +1,8 @@
-# dsh-mobile-use 0.4.0（DSHA 插件，预发布版）
+# dsh-mobile-use（DSH 插件）
 
-面向使用 DSHA 且手机已 root 的用户，把 agent_mobile_use 0.11.0 的后台虚拟副屏接入 DSHA，并从宿主真实任务事件同步小米超级岛状态。针对 DSH 0.2.0-rc.2 接口开发；注册普通 MCP tools。DSHA 加载、实际工具调用与岛内二选一答案回传已通过；模块多题、多选/自定义及面板关闭另已通过远程 Agent 真机验收。其余宿主竞争回答和下载界面等项目见主仓库验收记录。已发布构件以 GitHub Release 为准。
+本插件将 agent_mobile_use 手机模块接入 DSH。默认 `dsha` 模式保留 DSHA 宿主事件同步和 16 个工具；`remote` 模式面向通用 DSH 宿主，使用私有 token、独占控制租约和 17 个工具。手机网关可经 SSH 本地转发访问。通用模式包含在当前开发源码中，v0.11.0-alpha 的 0.4.0 发布包不包含该模式。
+
+通用宿主的安装、凭据和验证步骤见 [dsh-hosts.md](dsh-hosts.md)。本页下方的自动事件与 `ask_user_question` 描述适用于默认 DSHA 模式。通用模式的任务生命周期由 `mobile_task_begin` / `mobile_task_update` / `mobile_task_end` 管理，手机答题使用 `mobile_ask`。
 
 ## 状态与工具
 
@@ -44,4 +46,4 @@ dsha-android 的主屏与 dsha-vscreen 的 App 虚拟屏保留。root 虚拟屏�
 
 状态协议、签名与验收边界见完整源码库中的 docs/live-agent-0.11.md。
 
-电脑/NAS 远程 Agent 使用独立 `agent-mobile-use-remote` ZIP，含显式任务生命周期和手机答题工具，配置见源码库 `docs/remote-access.md`。本 DSHA 插件仍注册 16 个工具并使用宿主事件同步任务；远程客户端注册 17 个工具。远程任务持有控制租约时，本机屏幕操作会报告占用，应先结束该任务再切换控制者。
+电脑/NAS 远程 Agent 可以使用独立 `agent-mobile-use-remote` ZIP，配置见源码库 `docs/remote-access.md`。本 bundle 的 `remote` 模式复用同一客户端和 17 个工具；`dsha` 模式注册 16 个工具并使用宿主事件同步任务。远程任务持有控制租约时，本机屏幕操作会报告占用，应先结束该任务再切换控制者。

@@ -4,7 +4,25 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
-const { request } = require('../lib/gateway.cjs');
+const { request, client } = require('../lib/gateway.cjs');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+test('显式凭据路径用于宿主生命周期请求，并拒绝向非回环地址发送凭据', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mobile-use-token-'));
+  const tokenFile = path.join(dir, 'token');
+  fs.writeFileSync(tokenFile, 'a'.repeat(64), { mode: 0o600 });
+  const server = http.createServer((req, res) => {
+    assert.equal(req.headers.authorization, 'Bearer ' + 'a'.repeat(64));
+    res.writeHead(200, { 'Content-Type': 'application/json' });res.end('{"success":true}');
+  });
+  server.listen(0, '127.0.0.1');await once(server, 'listening');
+  t.after(() => { server.closeAllConnections();server.close();fs.rmSync(dir, { recursive: true, force: true }); });
+  const post = client(`http://127.0.0.1:${server.address().port}`, { tokenFile });
+  assert.equal((await post('/api/integration', {})).success, true);
+  await assert.rejects(request('http://192.0.2.1:3070/api/action', { tokenFile }), /ENDPOINT_REQUIRES_LOOPBACK_SSH_FORWARD/);
+});
 
 test('响应头后的响应体同样受到截止保护', async () => {
   const server = http.createServer((req, res) => { res.writeHead(200);res.flushHeaders(); });
