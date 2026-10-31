@@ -4,13 +4,21 @@
   "description": "DSH tools and usage guide for agent-mobile-use (root virtual display + HyperOS super island gateway on 127.0.0.1:3070)",
   "type": "module",
   "main": "lib/index.js",
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "README.md",
+    "dsh-hosts.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/huantuoshen-prog/agent-mobile-use-hyperos.git",
     "directory": "dsha-plugin"
   },
   "engines": {
-    "dsh": "0.2.0-rc.2"
+    "node": ">=22",
+    "dsh": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5"
   },
   "exports": {
     ".": "./lib/index.js",
@@ -22,7 +30,7 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-mcp-client": "0.2.0-rc.2"
+    "@deepseek-ai/dsh-mcp-client": "0.2.0-rc.2 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.1-rc.4 || 0.2.1-rc.5"
   },
   "license": "MIT"
 }

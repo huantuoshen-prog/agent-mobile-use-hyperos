@@ -1,8 +1,10 @@
-# Agent Mobile Use · DSHA Root 副屏
+# Agent Mobile Use · Android Agent 副屏
 
-**面向使用 DSHA 且手机已 root 的用户，提供方便的后台虚拟副屏，并适配小米超级岛。**
+**为已 Root 的 Android 手机提供后台虚拟副屏，并适配小米超级岛。**
 
-DSHA 通过配套插件调用模块，在独立副屏中打开应用、截图、读屏和操作。任务进行、前台控制、后台副屏、等待回答、完成、失败和停止等状态会同步到超级岛，手机上可以查看进展、进入 DSHA 或停止任务。
+DSHA、通用 DSH 宿主和支持 MCP stdio 的 Agent 均可连接手机模块，在独立副屏中打开应用、截图、读屏和操作。任务状态可显示在超级岛，手机上可以查看进展、回答问题或停止手机控制。
+
+通用 DSH bundle 模式位于当前开发源码，尚未包含在 v0.11.0-alpha 的 0.4.0 发布包中。构建与配置见[通用 DSH 宿主接入](dsha-plugin/dsh-hosts.md)；独立 MCP 客户端见[远程接入](docs/remote-access.md)。
 
 [下载 v0.11.0-alpha](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha) · [交给 Agent 安装](#复制给-agent-一键安装) · [安装步骤](#安装) · [使用方式](#使用) · [适配与验收](docs/live-agent-0.11.md) · [English](#english)
 
@@ -44,6 +46,7 @@ SHA-256 校验文件：https://github.com/huantuoshen-prog/agent-mobile-use-hype
 
 - **后台虚拟副屏**：将应用启动到模块创建的副屏，通过 DSHA 工具截图、读取控件和操作，支持与物理主屏切换。
 - **DSHA 直接调用**：配套插件注册十六个工具，提供副屏创建、回收、缩放、截图、读屏、输入、应用枚举和音频设置等能力。
+- **通用 DSH 宿主**：开发版 bundle 可通过私有凭据和本机网关或 SSH 转发连接，注册带独占控制租约的 17 个工具。
 - **小米超级岛**：按真实任务阶段切换图标、颜色和内容，后台副屏带外圈光效；等待状态保持单个紧凑胶囊。
 - **自动同步任务状态**：监听 DSHA 宿主事件，结束状态由整轮任务结果确认；todo 清单提供实际进度数量。
 - **手机端停止**：通知按钮绑定当前会话和轮次，发送停止请求并等待 Agent 确认结果。
@@ -70,6 +73,8 @@ SHA-256 校验文件：https://github.com/huantuoshen-prog/agent-mobile-use-hype
 小米超级岛需要设备支持及相应的 LSPosed 作用域。ColorOS 路径保留，其他 ROM 和 Android 版本尚未完成本轮真机验收。
 
 ## 安装
+
+以下步骤适用于 DSHA 本机模式；通用 DSH 和其他 MCP 宿主分别按[通用 DSH 指南](dsha-plugin/dsh-hosts.md)和[远程接入指南](docs/remote-access.md)配置。
 
 从 [Release](https://github.com/huantuoshen-prog/agent-mobile-use-hyperos/releases/tag/v0.11.0-alpha) 下载两个 ZIP：
 

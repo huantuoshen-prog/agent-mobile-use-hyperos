@@ -211,3 +211,9 @@ test('CLI rejects non-loopback endpoints without printing token', async t => {
   await once(a.child, 'exit');
   assert.equal(a.child.exitCode, 1);assert.equal(a.stderr(), 'ENDPOINT_REQUIRES_LOOPBACK_SSH_FORWARD\n');
 });
+
+test('CLI reports an unavailable credential file without printing its path or token', async t => {
+  const { start } = await fixture(t), a = start(undefined, ['--token-file', path.join(os.tmpdir(), 'missing-mobile-use-token', 'token')]);
+  await once(a.child, 'exit');
+  assert.equal(a.child.exitCode, 1);assert.equal(a.stderr(), 'TOKEN_FILE_UNAVAILABLE\n');
+});
